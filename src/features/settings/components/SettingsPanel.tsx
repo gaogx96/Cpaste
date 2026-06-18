@@ -12,6 +12,7 @@ import AdvancedSettingsGroup from "./groups/AdvancedSettingsGroup";
 import AppearanceSettingsGroup from "./groups/AppearanceSettingsGroup";
 import DefaultAppsSettingsGroup from "./groups/DefaultAppsSettingsGroup";
 import DataSettingsGroup from "./groups/DataSettingsGroup";
+import SmartGroupSettingsGroup from "../../smart-groups/components/SmartGroupSettingsGroup";
 import SettingsFooter from "./SettingsFooter";
 
 interface SettingsPanelProps {
@@ -316,6 +317,13 @@ const SettingsPanel = (props: SettingsPanelProps) => {
                 appSettings={appSettings}
                 theme={theme}
                 colorMode={colorMode}
+            />
+
+            {/* Smart Group Settings */}
+            <SmartGroupSettingsGroup
+                t={t}
+                collapsed={collapsedGroups['smart_groups']}
+                onToggle={() => toggleGroup('smart_groups')}
             />
 
             {/* Appearance Settings */}

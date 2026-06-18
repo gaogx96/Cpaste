@@ -15,4 +15,13 @@ export interface ClipboardEntry {
   is_external?: boolean;
   pinned_order?: number;
   file_preview_exists?: boolean;
+
+  // Smart group fields
+  smart_group_id?: number | null;
+  smart_group_name?: string;
+  note?: string;
+  group_confidence?: number;
+  group_reason?: string;
+  group_match_type?: string;
+  group_manual_override?: boolean;
 }

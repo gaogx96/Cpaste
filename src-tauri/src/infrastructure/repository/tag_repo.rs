@@ -270,6 +270,7 @@ impl TagRepository for SqliteTagRepository {
                     pinned_order: row.get(11).unwrap_or(0),
                     source_app_path: row.get(12).unwrap_or(None),
                     file_preview_exists: true, // simplified
+                    ..Default::default()
                 })
             })
             .map_err(|e| e.to_string())?;

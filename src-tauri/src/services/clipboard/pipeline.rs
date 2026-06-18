@@ -6,6 +6,7 @@ use crate::infrastructure::windows_api::window_tracker::{
     get_clipboard_source_app_info, ActiveAppInfo,
 };
 use crate::services::clipboard::utils::*;
+use crate::services::smart_group_classifier::{self, SmartGroupConfig};
 use base64::Engine;
 use std::sync::atomic::Ordering;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -72,6 +73,7 @@ impl ClipboardPipeline {
                 Box::new(DiscoveryStage),
                 Box::new(TransformationStage),
                 Box::new(ValidationStage),
+                Box::new(ClassificationStage),
                 Box::new(PersistenceStage),
                 Box::new(DistributionStage),
             ],
@@ -173,6 +175,7 @@ impl PipelineStage for DiscoveryStage {
             is_external,
             pinned_order: 0,
             file_preview_exists: true,
+            ..Default::default()
         });
     }
 }
@@ -417,7 +420,71 @@ impl PipelineStage for ValidationStage {
     }
 }
 
-// Stage 4: Persistence
+// Stage 4: Smart Group Classification
+pub struct ClassificationStage;
+impl PipelineStage for ClassificationStage {
+    fn process(&self, ctx: &mut PipelineContext) {
+        let entry = match ctx.entry.as_ref() {
+            Some(e) => e,
+            None => return,
+        };
+
+        // Skip classification if entry already has an ID (dedup existing, don't re-classify)
+        if entry.id != 0 {
+            return;
+        }
+
+        // Only classify text-type content
+        if !is_text_type(&entry.content_type) {
+            return;
+        }
+
+        let db_state = ctx.app_handle.state::<DbState>();
+
+        // Load groups + rules + examples from DB
+        let groups = match db_state.smart_group_repo.get_enabled_auto_match_groups() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+
+        if groups.is_empty() {
+            return;
+        }
+
+        let group_ids: Vec<i64> = groups.iter().map(|g| g.id).collect();
+
+        let rules = match db_state.smart_group_repo.list_all_rules_for_groups(&group_ids) {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+
+        let examples = match db_state.smart_group_repo.list_all_examples_for_groups(&group_ids) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+
+        let config = SmartGroupConfig::build(groups, rules, examples);
+
+        let result = smart_group_classifier::classify(
+            &entry.content,
+            &entry.content_type,
+            &config,
+            None, // use default 30ms budget
+        );
+
+        if let Some(group_id) = result.smart_group_id {
+            if let Some(entry_mut) = ctx.entry.as_mut() {
+                entry_mut.smart_group_id = Some(group_id);
+                entry_mut.smart_group_name = result.smart_group_name;
+                entry_mut.group_confidence = result.confidence;
+                entry_mut.group_reason = result.reason;
+                entry_mut.group_match_type = result.match_type;
+            }
+        }
+    }
+}
+
+// Stage 5: Persistence
 pub struct PersistenceStage;
 impl PipelineStage for PersistenceStage {
     fn process(&self, ctx: &mut PipelineContext) {
@@ -501,7 +568,7 @@ impl PipelineStage for PersistenceStage {
     }
 }
 
-// Stage 5: Distribution
+// Stage 6: Distribution
 pub struct DistributionStage;
 impl PipelineStage for DistributionStage {
     fn process(&self, ctx: &mut PipelineContext) {

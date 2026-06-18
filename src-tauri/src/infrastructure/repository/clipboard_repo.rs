@@ -643,6 +643,7 @@ impl SqliteClipboardRepository {
                 pinned_order: row.get(11).unwrap_or(0),
                 source_app_path: row.get(12).unwrap_or(None),
                 file_preview_exists: true,
+                ..Default::default()
             }))
         } else {
             Ok(None)
@@ -761,6 +762,94 @@ impl SqliteClipboardRepository {
             Ok(None)
         }
     }
+
+    /// Query clipboard entries by smart group (used by SmartGroupRepository).
+    /// Pass group_id=None to query ungrouped entries.
+    pub fn get_entries_by_group_with_conn(
+        &self,
+        conn: &Connection,
+        group_id: Option<i64>,
+        limit: i32,
+        offset: i32,
+    ) -> Result<Vec<ClipboardEntry>, String> {
+        let map_row = |row: &rusqlite::Row| {
+            let tags_str: String = row.get(8).unwrap_or_else(|_| "[]".to_string());
+            let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
+            let content_type: String = row.get(1)?;
+            let content_raw: String = row.get(2)?;
+            let html_raw: Option<String> = row.get(3).ok();
+            let preview_raw: String = row.get(6)?;
+            let content = self.maybe_decrypt_text(&content_raw);
+            let preview = self.maybe_decrypt_text(&preview_raw);
+            let html_content = html_raw.as_ref().map(|v| self.maybe_decrypt_text(v));
+
+            Ok(ClipboardEntry {
+                id: row.get(0)?,
+                content_type,
+                content,
+                html_content,
+                source_app: row.get(4)?,
+                timestamp: row.get(5)?,
+                preview,
+                is_pinned: row.get::<_, i32>(7)? == 1,
+                tags,
+                use_count: row.get(9).unwrap_or(0),
+                is_external: row.get::<_, i32>(10)? == 1,
+                pinned_order: row.get(11).unwrap_or(0),
+                source_app_path: row.get(12).unwrap_or(None),
+                file_preview_exists: true,
+                smart_group_id: row.get(13).ok().flatten(),
+                smart_group_name: row.get(14).unwrap_or_default(),
+                note: row.get(15).unwrap_or_default(),
+                group_confidence: row.get(16).unwrap_or(0.0),
+                group_reason: row.get(17).unwrap_or_default(),
+                group_match_type: row.get(18).unwrap_or_default(),
+                group_manual_override: row.get::<_, i32>(19).unwrap_or(0) != 0,
+            })
+        };
+
+        let (sql, params_vec): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match group_id {
+            Some(gid) => (
+                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
+                        smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
+                 FROM clipboard_history
+                 WHERE smart_group_id = ?1 AND content_type != 'image'
+                 ORDER BY timestamp DESC
+                 LIMIT ?2 OFFSET ?3"
+                    .to_string(),
+                vec![
+                    Box::new(gid),
+                    Box::new(limit),
+                    Box::new(offset),
+                ],
+            ),
+            None => (
+                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
+                        smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
+                 FROM clipboard_history
+                 WHERE smart_group_id IS NULL AND content_type != 'image'
+                 ORDER BY timestamp DESC
+                 LIMIT ?1 OFFSET ?2"
+                    .to_string(),
+                vec![
+                    Box::new(limit),
+                    Box::new(offset),
+                ],
+            ),
+        };
+
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params_refs.as_slice(), map_row)
+            .map_err(|e| e.to_string())?;
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row.map_err(|e| e.to_string())?);
+        }
+        Ok(entries)
+    }
 }
 
 impl ClipboardRepository for SqliteClipboardRepository {
@@ -809,6 +898,7 @@ impl ClipboardRepository for SqliteClipboardRepository {
                     // Avoid synchronous filesystem existence checks in history query.
                     // Missing files are still handled by frontend image/file preview error fallback.
                     file_preview_exists: true,
+                ..Default::default()
                 },
                 content_raw,
                 preview_raw,
@@ -902,6 +992,8 @@ impl ClipboardRepository for SqliteClipboardRepository {
                  WHERE ch.content LIKE '%' || ?1 || '%'
                     OR ch.source_app LIKE '%' || ?1 || '%'
                     OR et.tag LIKE '%' || ?1 || '%'
+                    OR ch.note LIKE '%' || ?1 || '%'
+                    OR ch.smart_group_name LIKE '%' || ?1 || '%'
                  ORDER BY ch.timestamp DESC
                  LIMIT ?2"
             };
@@ -926,7 +1018,8 @@ impl ClipboardRepository for SqliteClipboardRepository {
                         is_external: row.get::<_, i32>(10)? == 1,
                         pinned_order: row.get(11).unwrap_or(0),
                         source_app_path: row.get(12).unwrap_or(None),
-                        file_preview_exists: true, // Simplified for search
+                        file_preview_exists: true,
+                ..Default::default() // Simplified for search
                     })
                 })
                 .map_err(|e| e.to_string())?;
@@ -982,6 +1075,8 @@ impl ClipboardRepository for SqliteClipboardRepository {
                          ch.content LIKE '%' || ?1 || '%'
                          OR ch.source_app LIKE '%' || ?1 || '%'
                          OR et.tag LIKE '%' || ?1 || '%'
+                         OR ch.note LIKE '%' || ?1 || '%'
+                         OR ch.smart_group_name LIKE '%' || ?1 || '%'
                        )
                      ORDER BY ch.timestamp DESC, ch.id DESC
                      LIMIT ?2",
@@ -1018,6 +1113,7 @@ impl ClipboardRepository for SqliteClipboardRepository {
                         pinned_order: row.get(11).unwrap_or(0),
                         source_app_path: row.get(12).unwrap_or(None),
                         file_preview_exists: true,
+                ..Default::default()
                     })
                 })
                 .map_err(|e| e.to_string())?;
@@ -1045,9 +1141,11 @@ impl ClipboardRepository for SqliteClipboardRepository {
                              WHERE se.entry_id = ch.id 
                                AND se.tag COLLATE NOCASE IN {}
                          )
-                         OR ch.content LIKE ?1 
-                         OR ch.preview LIKE ?1 
+                         OR ch.content LIKE ?1
+                         OR ch.preview LIKE ?1
                          OR ch.html_content LIKE ?1
+                         OR ch.note LIKE ?1
+                         OR ch.smart_group_name LIKE ?1
                      )
                        AND ((ch.timestamp < ?2) OR (ch.timestamp = ?2 AND ch.id < ?3))
                      ORDER BY ch.timestamp DESC, ch.id DESC
@@ -1075,6 +1173,7 @@ impl ClipboardRepository for SqliteClipboardRepository {
                                 pinned_order: row.get(11).unwrap_or(0),
                                 source_app_path: row.get(12).unwrap_or(None),
                                 file_preview_exists: true,
+                ..Default::default()
                             })
                         })
                         .map_err(|e| e.to_string())?;

@@ -349,8 +349,8 @@ pub fn reset_settings(
     let main_hotkey = state
         .settings_repo
         .get("app.hotkey")
-        .unwrap_or(Some("Alt+C".to_string()))
-        .unwrap_or("Alt+C".to_string());
+        .unwrap_or(Some("Alt+`".to_string()))
+        .unwrap_or("Alt+`".to_string());
     let rich_hotkey = state
         .settings_repo
         .get("app.rich_paste_hotkey")

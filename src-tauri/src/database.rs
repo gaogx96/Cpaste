@@ -18,6 +18,7 @@ pub struct DbState {
     pub repo: SqliteClipboardRepository,
     pub settings_repo: SqliteSettingsRepository,
     pub tag_repo: SqliteTagRepository,
+    pub smart_group_repo: crate::infrastructure::repository::smart_group_repo::SmartGroupRepository,
 }
 
 const SENSITIVE_KEYS: &[&str] = &[
@@ -286,7 +287,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         [],
     );
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hotkey', 'Alt+C')",
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.hotkey', 'Alt+`')",
         [],
     );
     let _ = conn.execute(
@@ -396,6 +397,7 @@ mod tests {
             is_external: false,
             pinned_order: 0,
             file_preview_exists: true,
+            ..Default::default()
         };
 
         let conn_arc = Arc::new(Mutex::new(conn));

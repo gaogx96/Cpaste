@@ -288,8 +288,8 @@ fn load_settings(repo: &impl SettingsRepository) -> StartupSettings {
             .and_then(|v| v.parse::<u32>().ok()),
         main_hotkey: repo
             .get("app.hotkey")
-            .unwrap_or(Some("Win+V".to_string()))
-            .unwrap_or("Win+V".to_string()),
+            .unwrap_or(Some("Alt+`".to_string()))
+            .unwrap_or("Alt+`".to_string()),
         arrow_key_selection: repo
             .get("app.arrow_key_selection")
             .unwrap_or(Some("false".to_string()))
@@ -307,11 +307,13 @@ fn setup_state(
     let repo = SqliteClipboardRepository::new(conn_arc.clone());
     let settings_repo = SqliteSettingsRepository::new(conn_arc.clone());
     let tag_repo = SqliteTagRepository::new(conn_arc.clone());
+    let smart_group_repo = crate::infrastructure::repository::smart_group_repo::SmartGroupRepository::new(conn_arc.clone());
     app.manage(DbState {
         conn: conn_arc,
         repo,
         settings_repo,
         tag_repo,
+        smart_group_repo,
     });
 
     app.manage(SettingsState {

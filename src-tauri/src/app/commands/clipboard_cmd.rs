@@ -131,6 +131,7 @@ pub async fn add_manual_item(
         is_external: false,
         pinned_order: 0,
         file_preview_exists: true,
+        ..Default::default()
     };
 
     let app_data_dir = app_handle.state::<AppDataDir>();

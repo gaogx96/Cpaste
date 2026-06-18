@@ -35,7 +35,9 @@ export const useFilteredHistory = ({
       return (
         item.content?.toLowerCase().includes(effectiveSearch) ||
         item.source_app?.toLowerCase().includes(effectiveSearch) ||
-        item.tags?.some((tag) => tag.toLowerCase().includes(effectiveSearch))
+        item.tags?.some((tag) => tag.toLowerCase().includes(effectiveSearch)) ||
+        item.note?.toLowerCase().includes(effectiveSearch) ||
+        item.smart_group_name?.toLowerCase().includes(effectiveSearch)
       );
     });
 

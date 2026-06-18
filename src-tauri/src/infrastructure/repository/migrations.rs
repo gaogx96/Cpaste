@@ -169,6 +169,92 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO schema_migrations (version) VALUES (9)", [])?;
     }
 
+    // Migration 10: Smart Groups (custom grouping system)
+    if current_version < 10 {
+        // New tables
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS smart_groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                color TEXT DEFAULT '#64748b',
+                icon TEXT DEFAULT '',
+                enabled INTEGER DEFAULT 1,
+                auto_match_enabled INTEGER DEFAULT 1,
+                is_sensitive INTEGER DEFAULT 0,
+                sort_order INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS smart_group_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                rule_type TEXT NOT NULL,
+                pattern TEXT NOT NULL,
+                weight REAL DEFAULT 1.0,
+                enabled INTEGER DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY(group_id) REFERENCES smart_groups(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS smart_group_examples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                group_id INTEGER NOT NULL,
+                example_text TEXT NOT NULL,
+                note TEXT DEFAULT '',
+                enabled INTEGER DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY(group_id) REFERENCES smart_groups(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        // New columns on clipboard_history
+        let history_columns = [
+            ("smart_group_id", "INTEGER DEFAULT NULL"),
+            ("smart_group_name", "TEXT DEFAULT ''"),
+            ("note", "TEXT DEFAULT ''"),
+            ("group_confidence", "REAL DEFAULT 0.0"),
+            ("group_reason", "TEXT DEFAULT ''"),
+            ("group_match_type", "TEXT DEFAULT ''"),
+            ("group_manual_override", "INTEGER DEFAULT 0"),
+        ];
+
+        for (name, def) in history_columns {
+            if !has_column(conn, "clipboard_history", name)? {
+                conn.execute(
+                    &format!("ALTER TABLE clipboard_history ADD COLUMN {} {}", name, def),
+                    [],
+                )?;
+            }
+        }
+
+        // Optional: assignment logs table for future learning
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS smart_group_assignment_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                clipboard_id INTEGER NOT NULL,
+                old_group_id INTEGER DEFAULT NULL,
+                new_group_id INTEGER DEFAULT NULL,
+                action TEXT NOT NULL,
+                reason TEXT DEFAULT '',
+                created_at INTEGER NOT NULL
+            )",
+            [],
+        )?;
+
+        conn.execute("INSERT INTO schema_migrations (version) VALUES (10)", [])?;
+    }
+
     Ok(())
 }
 
