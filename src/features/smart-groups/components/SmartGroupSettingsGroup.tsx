@@ -222,7 +222,7 @@ const GroupCard: FC<{
                   onClick={async () => {
                     if (!newRulePattern.trim()) return;
                     try {
-                      await addRule({ rule_type: newRuleType, pattern: newRulePattern.trim() });
+                      await addRule({ ruleType: newRuleType, pattern: newRulePattern.trim() });
                       setNewRulePattern("");
                       setShowAddRule(false);
                     } catch (e: any) {
@@ -285,7 +285,7 @@ const GroupCard: FC<{
                   className="btn btn-xs btn-primary"
                   onClick={async () => {
                     if (!newExampleText.trim()) return;
-                    await addExample({ example_text: newExampleText.trim() });
+                    await addExample({ exampleText: newExampleText.trim() });
                     setNewExampleText("");
                     setShowAddExample(false);
                   }}

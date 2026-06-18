@@ -50,8 +50,8 @@ export const getSmartGroupCount = async (groupId: number): Promise<number> => {
 // ─── Rule CRUD ───
 
 export const createSmartGroupRule = async (params: {
-  group_id: number;
-  rule_type: string;
+  groupId: number;
+  ruleType: string;
   pattern: string;
   weight?: number;
 }): Promise<number> => {
@@ -69,8 +69,8 @@ export const listSmartGroupRules = async (groupId: number): Promise<SmartGroupRu
 // ─── Example CRUD ───
 
 export const createSmartGroupExample = async (params: {
-  group_id: number;
-  example_text: string;
+  groupId: number;
+  exampleText: string;
   note?: string;
 }): Promise<number> => {
   return invoke("create_smart_group_example", params);

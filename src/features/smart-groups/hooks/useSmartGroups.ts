@@ -104,9 +104,9 @@ export const useGroupRules = (groupId: number | null) => {
   }, [refresh]);
 
   const addRule = useCallback(
-    async (params: { rule_type: string; pattern: string; weight?: number }) => {
+    async (params: { ruleType: string; pattern: string; weight?: number }) => {
       if (groupId === null) return;
-      await api.createSmartGroupRule({ group_id: groupId, ...params });
+      await api.createSmartGroupRule({ groupId, ...params });
       await refresh();
     },
     [groupId, refresh]
@@ -146,9 +146,9 @@ export const useGroupExamples = (groupId: number | null) => {
   }, [refresh]);
 
   const addExample = useCallback(
-    async (params: { example_text: string; note?: string }) => {
+    async (params: { exampleText: string; note?: string }) => {
       if (groupId === null) return;
-      await api.createSmartGroupExample({ group_id: groupId, ...params });
+      await api.createSmartGroupExample({ groupId, ...params });
       await refresh();
     },
     [groupId, refresh]
