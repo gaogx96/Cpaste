@@ -26,8 +26,6 @@ use windows::Win32::Foundation::HWND;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 #[cfg(target_os = "windows")]
-use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
-#[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::SetWindowSubclass;
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{

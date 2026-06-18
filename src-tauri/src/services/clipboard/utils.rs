@@ -2,12 +2,9 @@ use crate::database::save_image_to_file;
 use crate::domain::models::ClipboardEntry;
 use base64::{engine::general_purpose, Engine as _};
 use regex::Regex;
-use reqwest::header::CONTENT_TYPE;
 use serde::{Deserialize, Serialize};
-use std::io::Read;
 use std::path::Path;
 use std::sync::OnceLock;
-use std::time::Duration;
 use urlencoding::decode;
 
 const HTML_PREVIEW_MAX_CHARS: usize = 5000;
@@ -29,6 +26,7 @@ struct StoredNamedClipboardFormat {
     data_base64: String,
 }
 
+#[allow(dead_code)]
 fn normalize_image_ext(ext: &str) -> Option<&'static str> {
     match ext.to_ascii_lowercase().as_str() {
         "png" => Some("png"),
@@ -40,6 +38,7 @@ fn normalize_image_ext(ext: &str) -> Option<&'static str> {
     }
 }
 
+#[allow(dead_code)]
 fn image_ext_from_mime(mime: &str) -> Option<&'static str> {
     match mime {
         "image/png" => Some("png"),
@@ -51,6 +50,7 @@ fn image_ext_from_mime(mime: &str) -> Option<&'static str> {
     }
 }
 
+#[allow(dead_code)]
 fn image_ext_from_url(url: &str) -> Option<&'static str> {
     let parsed = reqwest::Url::parse(url).ok()?;
     let ext = Path::new(parsed.path())
@@ -237,7 +237,7 @@ fn resolve_animated_image_src_to_data_url(src: &str) -> Option<String> {
         return gif_data_url_from_bytes(&bytes);
     }
 
-    if let Some(remote_url) = normalize_remote_img_url(value) {
+    if let Some(_remote_url) = normalize_remote_img_url(value) {
         // Remote GIF URL — skip downloading to avoid privacy leak
         // (would expose IP to third-party server)
     }
@@ -316,6 +316,7 @@ pub fn extract_animated_image_data_url_from_text(text: &str) -> Option<String> {
     resolve_animated_image_src_to_data_url(&candidate)
 }
 
+#[allow(dead_code)]
 fn save_image_bytes_to_attachments(
     bytes: &[u8],
     ext: &str,
@@ -1680,6 +1681,7 @@ pub fn detect_content_type(text: &str) -> String {
     "text".to_string()
 }
 
+#[allow(dead_code)]
 pub fn contains_sensitive_info(text: &str, kinds: &[String], custom_rules: &[String]) -> bool {
     static PHONE_RE: OnceLock<Regex> = OnceLock::new();
     static IDCARD_RE: OnceLock<Regex> = OnceLock::new();
@@ -2028,7 +2030,7 @@ pub fn embed_local_images(html: &str) -> String {
             }
         }
 
-        if let Some(remote_url) = normalize_remote_img_url(src) {
+        if let Some(_remote_url) = normalize_remote_img_url(src) {
             // Remote image — keep original URL instead of downloading
             // (would expose IP to third-party server)
         }
@@ -2116,7 +2118,7 @@ pub fn process_local_images_in_html(html: &str, data_dir: &std::path::Path) -> S
             }
         }
 
-        if let Some(remote_url) = normalize_remote_img_url(src) {
+        if let Some(_remote_url) = normalize_remote_img_url(src) {
             // Remote image — keep original URL instead of downloading
             // (would expose IP to third-party server)
         }

@@ -1,4 +1,4 @@
-use tauri::{Manager, State};
+use tauri::State;
 
 use crate::database::DbState;
 use crate::domain::models::SmartGroupExample;

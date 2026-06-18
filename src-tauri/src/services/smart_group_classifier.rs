@@ -6,13 +6,13 @@ use crate::domain::models::{
 };
 
 /// A compiled rule ready for matching — regex rules are compiled once at load time.
-struct CompiledRule {
+pub(crate) struct CompiledRule {
     rule: SmartGroupRule,
     regex: Option<Regex>,
 }
 
 /// A compiled example ready for matching — template patterns are generated once at load time.
-struct CompiledExample {
+pub(crate) struct CompiledExample {
     example: SmartGroupExample,
     /// Optional auto-generated structural template regex (e.g. `book_id:\s*\d+`)
     template: Option<Regex>,
@@ -20,8 +20,8 @@ struct CompiledExample {
 
 pub struct CompiledGroup {
     pub group: SmartGroup,
-    pub rules: Vec<CompiledRule>,
-    pub examples: Vec<CompiledExample>,
+    pub(crate) rules: Vec<CompiledRule>,
+    pub(crate) examples: Vec<CompiledExample>,
 }
 
 pub struct SmartGroupConfig {

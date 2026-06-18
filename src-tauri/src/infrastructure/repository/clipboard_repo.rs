@@ -15,6 +15,7 @@ use urlencoding::decode;
 const RICH_IMAGE_FALLBACK_PREFIX: &str = "<!--CPASTE_RICH_IMAGE:";
 const RICH_IMAGE_FALLBACK_SUFFIX: &str = "-->";
 
+#[allow(dead_code)]
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

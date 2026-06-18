@@ -1,6 +1,5 @@
 use crate::app_state::PasteQueue;
 use crate::database::DbState;
-use crate::domain::models::ClipboardEntry;
 use crate::infrastructure::repository::clipboard_repo::ClipboardRepository;
 use crate::services::clipboard_ops::{clear_recent_paste_marker, remember_recent_paste};
 use serde::{Deserialize, Serialize};
@@ -21,7 +20,7 @@ pub struct PasteQueueResponse {
 
 #[tauri::command]
 pub fn get_paste_queue(
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     state: State<'_, PasteQueue>,
 ) -> PasteQueueResponse {
     let guard = state.0.lock().unwrap();
@@ -38,7 +37,7 @@ pub fn get_paste_queue(
 
 #[tauri::command]
 pub fn set_paste_queue(
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     state: State<'_, PasteQueue>,
     ids: Vec<i64>,
 ) {

@@ -3,7 +3,6 @@ use crate::database::{self, DbState};
 use crate::error::{AppError, AppResult};
 use crate::infrastructure::repository::clipboard_repo::ClipboardRepository;
 use crate::infrastructure::repository::tag_repo::TagRepository;
-use serde_json;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 fn truncate_chars_with_suffix(text: &str, max_chars: usize, suffix: &str) -> String {
@@ -76,7 +75,7 @@ pub fn toggle_clipboard_pin(
 
 #[tauri::command]
 pub fn update_tags(
-    app_handle: AppHandle,
+    _app_handle: AppHandle,
     state: State<'_, DbState>,
     session: State<'_, SessionHistory>,
     app_data_dir: State<'_, AppDataDir>,

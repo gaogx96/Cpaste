@@ -1,4 +1,4 @@
-use tauri::{Manager, State};
+use tauri::State;
 
 use crate::database::DbState;
 use crate::domain::models::SmartGroupRule;
@@ -49,7 +49,7 @@ pub fn create_smart_group_rule(
 
 #[tauri::command]
 pub fn update_smart_group_rule(
-    db: State<'_, DbState>,
+    _db: State<'_, DbState>,
     id: i64,
     group_id: Option<i64>,
     rule_type: Option<String>,
