@@ -188,37 +188,37 @@ const GroupCard: FC<{
             </div>
 
             {showAddRule && (
-              <div style={{ display: 'flex', gap: 4 }}>
-                <select
-                  className="search-input"
-                  value={newRuleType}
-                  onChange={(e) => setNewRuleType(e.target.value)}
-                  style={{ width: 'auto', minWidth: 70, padding: '4px 6px', fontSize: 12 }}
-                >
-                  <option value="keyword">关键词</option>
-                  <option value="regex">正则</option>
-                  <option value="prefix">前缀</option>
-                  <option value="suffix">后缀</option>
-                  <option value="contains">包含</option>
-                </select>
-                <input
-                  className="search-input"
-                  placeholder="输入规则内容"
-                  value={newRulePattern}
-                  onChange={(e) => setNewRulePattern(e.target.value)}
-                  style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
-                />
-                <button className="btn btn-xs btn-primary" style={{ alignSelf: 'flex-end' }}
-                  onClick={async () => {
-                    if (!newRulePattern.trim()) return;
-                    try {
-                      await addRule({ ruleType: newRuleType, pattern: newRulePattern.trim() });
-                      setNewRulePattern("");
-                      setShowAddRule(false);
-                    } catch (e: any) { alert(e?.toString() || "添加失败"); }
-                  }}>
-                  添加
-                </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8 }}>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <select
+                    value={newRuleType}
+                    onChange={(e) => setNewRuleType(e.target.value)}
+                  >
+                    <option value="keyword">关键词</option>
+                    <option value="regex">正则</option>
+                    <option value="prefix">前缀</option>
+                    <option value="suffix">后缀</option>
+                    <option value="contains">包含</option>
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="输入规则内容"
+                    value={newRulePattern}
+                    onChange={(e) => setNewRulePattern(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button className="btn btn-xs btn-primary"
+                    onClick={async () => {
+                      if (!newRulePattern.trim()) return;
+                      try {
+                        await addRule({ ruleType: newRuleType, pattern: newRulePattern.trim() });
+                        setNewRulePattern("");
+                        setShowAddRule(false);
+                      } catch (e: any) { alert(e?.toString() || "添加失败"); }
+                    }}>
+                    添加
+                  </button>
+                </div>
               </div>
             )}
 
@@ -254,23 +254,24 @@ const GroupCard: FC<{
             </div>
 
             {showAddExample && (
-              <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-                <textarea
-                  className="search-input"
-                  placeholder="输入示例文本（如 book_id: 123456）"
-                  value={newExampleText}
-                  onChange={(e) => setNewExampleText(e.target.value)}
-                  style={{ flex: 1, fontSize: 12, padding: '4px 8px', minHeight: 32, resize: 'vertical' }}
-                />
-                <button className="btn btn-xs btn-primary" style={{ alignSelf: 'flex-end' }}
-                  onClick={async () => {
-                    if (!newExampleText.trim()) return;
-                    await addExample({ exampleText: newExampleText.trim() });
-                    setNewExampleText("");
-                    setShowAddExample(false);
-                  }}>
-                  添加
-                </button>
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 4, flex: '1 1 100%' }}>
+                  <textarea
+                    placeholder="输入示例文本（如 book_id: 123456）"
+                    value={newExampleText}
+                    onChange={(e) => setNewExampleText(e.target.value)}
+                    style={{ minWidth: 0, width: 0, flex: '1 1 auto', minHeight: 32, resize: 'vertical' }}
+                  />
+                  <button className="btn btn-xs btn-primary" style={{ alignSelf: 'flex-end' }}
+                    onClick={async () => {
+                      if (!newExampleText.trim()) return;
+                      await addExample({ exampleText: newExampleText.trim() });
+                      setNewExampleText("");
+                      setShowAddExample(false);
+                    }}>
+                    添加
+                  </button>
+                </div>
               </div>
             )}
 
