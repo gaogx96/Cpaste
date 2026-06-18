@@ -1,5 +1,5 @@
 import { useState, type FC } from "react";
-import { Plus, Trash2, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, Tag, FileText } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, Tag, FileText } from "lucide-react";
 import { useSmartGroups, useGroupRules, useGroupExamples } from "../hooks/useSmartGroups";
 import type { SmartGroup } from "../../../shared/types/smartGroup";
 
@@ -16,63 +16,70 @@ const SmartGroupSettingsGroup: FC<SmartGroupSettingsGroupProps> = ({ t: _t, coll
   const [expandedGroup, setExpandedGroup] = useState<number | null>(null);
 
   return (
-    <div className="settings-group">
-      <div className="settings-group-header" onClick={onToggle}>
+    <div className={`settings-group ${collapsed ? 'collapsed' : ''}`}>
+      <div className="group-header" onClick={onToggle}>
+        <h3>智能分组</h3>
         {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-        <span className="settings-group-title">智能分组</span>
-        <span className="settings-group-badge">{groups.length}</span>
       </div>
-
       {!collapsed && (
-        <div className="settings-group-content">
+        <div className="group-content">
           {/* Create button */}
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setShowCreate(!showCreate)}
-            style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}
-          >
-            <Plus size={14} /> 新建分组
-          </button>
+          <div className="setting-item">
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => setShowCreate(!showCreate)}
+              style={{ gap: 4 }}
+            >
+              <Plus size={14} /> 新建分组
+            </button>
+          </div>
 
           {/* Create form */}
           {showCreate && (
-            <div style={{ padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 8, marginBottom: 8 }}>
-              <input
-                className="input"
-                placeholder="分组名称"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                style={{ width: '100%', marginBottom: 8 }}
-                autoFocus
-              />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={async () => {
-                    if (!newName.trim()) return;
-                    await createGroup({ name: newName.trim() });
-                    setNewName("");
-                    setShowCreate(false);
-                  }}
-                >
-                  创建
-                </button>
-                <button className="btn btn-sm btn-ghost" onClick={() => { setShowCreate(false); setNewName(""); }}>
-                  取消
-                </button>
+            <div className="setting-item">
+              <div className="item-label-group">
+                <span className="item-label">分组名称</span>
+              </div>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <input
+                  className="search-input"
+                  placeholder="输入分组名称"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  autoFocus
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={async () => {
+                      if (!newName.trim()) return;
+                      await createGroup({ name: newName.trim() });
+                      setNewName("");
+                      setShowCreate(false);
+                    }}
+                  >
+                    创建
+                  </button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => { setShowCreate(false); setNewName(""); }}>
+                    取消
+                  </button>
+                </div>
               </div>
             </div>
           )}
 
+          {/* Group count / empty state */}
+          <div className="setting-item no-border" style={{ justifyContent: 'center', padding: '6px 0' }}>
+            {loading ? (
+              <span className="hint">加载中...</span>
+            ) : groups.length === 0 ? (
+              <span className="hint">暂无分组，点击上方按钮创建</span>
+            ) : (
+              <span className="hint">共 {groups.length} 个分组</span>
+            )}
+          </div>
+
           {/* Group list */}
-          {loading && <div style={{ padding: 12, color: 'var(--text-secondary)' }}>加载中...</div>}
-
-          {!loading && groups.length === 0 && (
-            <div style={{ padding: 12, color: 'var(--text-secondary)' }}>
-              暂无分组，点击上方按钮创建
-            </div>
-          )}
-
           {groups.map((group) => (
             <GroupCard
               key={group.id}
@@ -108,102 +115,85 @@ const GroupCard: FC<{
   const [newExampleText, setNewExampleText] = useState("");
 
   return (
-    <div className="smart-group-card" style={{
-      border: '1px solid var(--border-color)',
-      borderRadius: 8,
-      marginBottom: 8,
-      overflow: 'hidden',
-    }}>
-      {/* Header */}
+    <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
+      {/* Card header */}
       <div
-        className="smart-group-header"
         onClick={onToggleExpand}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '8px 12px',
-          cursor: 'pointer',
-          userSelect: 'none',
+          display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+          padding: '6px 0', userSelect: 'none',
         }}
       >
         <span style={{
           width: 10, height: 10, borderRadius: '50%',
           background: group.color || '#64748b', flexShrink: 0,
         }} />
-        <span style={{ flex: 1, fontWeight: 500 }}>{group.name}</span>
+        <span className="item-label" style={{ flex: 1, margin: 0 }}>{group.name}</span>
         {group.entry_count !== undefined && (
-          <span style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{group.entry_count} 条</span>
+          <span className="hint">{group.entry_count} 条</span>
         )}
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            className="btn btn-xs btn-ghost"
-            title={group.enabled ? "已启用" : "已禁用"}
+        <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+          <label className="switch" style={{ margin: 0 }}>
+            <input
+              className="cb" type="checkbox" checked={group.enabled}
+              onChange={async () => { await onUpdate({ id: group.id, enabled: !group.enabled }); }}
+            />
+            <div className="toggle"><div className="left" /><div className="right" /></div>
+          </label>
+          <button className="btn btn-xs btn-ghost" title="删除"
             onClick={async () => {
-              await onUpdate({ id: group.id, enabled: !group.enabled });
+              if (confirm(`确定删除分组「${group.name}」？`)) await onDelete(group.id);
             }}
-          >
-            {group.enabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
-          </button>
-          <button
-            className="btn btn-xs btn-ghost"
-            title="删除"
-            onClick={async () => {
-              if (confirm(`确定删除分组「${group.name}」？历史记录将移出该分组。`)) {
-                await onDelete(group.id);
-              }
-            }}
-          >
-            <Trash2 size={14} />
+            style={{ color: 'var(--danger-color, #ef4444)' }}>
+            <Trash2 size={13} />
           </button>
         </div>
       </div>
 
       {/* Expanded content */}
       {expanded && (
-        <div style={{ padding: '0 12px 12px' }}>
-          {/* Auto-match toggle */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 8 }}>
-            <input
-              type="checkbox"
-              checked={group.auto_match_enabled}
-              onChange={async (e) => {
-                await onUpdate({ id: group.id, auto_match_enabled: e.target.checked });
-              }}
-            />
-            参与自动识别
-          </label>
+        <div style={{ paddingTop: 4 }}>
+          {/* Auto-match & Sensitive toggles */}
+          <div className="setting-item" style={{ borderBottom: 'none', padding: '4px 0' }}>
+            <div className="item-label-group">
+              <span className="item-label">参与自动识别</span>
+              <span className="hint">启用后新剪贴内容自动与此分组规则匹配</span>
+            </div>
+            <label className="switch">
+              <input className="cb" type="checkbox" checked={group.auto_match_enabled}
+                onChange={async (e) => { await onUpdate({ id: group.id, auto_match_enabled: e.target.checked }); }} />
+              <div className="toggle"><div className="left" /><div className="right" /></div>
+            </label>
+          </div>
+          <div className="setting-item" style={{ borderBottom: 'none', padding: '4px 0' }}>
+            <div className="item-label-group">
+              <span className="item-label">敏感分组</span>
+              <span className="hint">开启后匹配的内容将被标记为敏感</span>
+            </div>
+            <label className="switch">
+              <input className="cb" type="checkbox" checked={group.is_sensitive}
+                onChange={async (e) => { await onUpdate({ id: group.id, is_sensitive: e.target.checked }); }} />
+              <div className="toggle"><div className="left" /><div className="right" /></div>
+            </label>
+          </div>
 
-          {/* Sensitive toggle */}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginBottom: 12 }}>
-            <input
-              type="checkbox"
-              checked={group.is_sensitive}
-              onChange={async (e) => {
-                await onUpdate({ id: group.id, is_sensitive: e.target.checked });
-              }}
-            />
-            敏感分组
-          </label>
-
-          {/* Rules */}
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <Tag size={13} />
-              <span style={{ fontWeight: 500, fontSize: 13 }}>规则</span>
-              <button className="btn btn-xs btn-ghost" onClick={() => setShowAddRule(!showAddRule)}>
-                <Plus size={12} /> 添加
+          {/* Rules section */}
+          <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch', borderBottom: 'none', gap: 6, padding: '8px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Tag size={14} />
+              <span className="item-label" style={{ margin: 0, flex: 1 }}>匹配规则</span>
+              <button className="btn btn-xs btn-ghost" onClick={() => { setShowAddRule(true); setShowAddExample(false); }}>
+                <Plus size={12} /> 添加规则
               </button>
             </div>
 
             {showAddRule && (
-              <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+              <div style={{ display: 'flex', gap: 4 }}>
                 <select
+                  className="search-input"
                   value={newRuleType}
                   onChange={(e) => setNewRuleType(e.target.value)}
-                  style={{ fontSize: 12, padding: '2px 4px' }}
+                  style={{ width: 'auto', minWidth: 70, padding: '4px 6px', fontSize: 12 }}
                 >
                   <option value="keyword">关键词</option>
                   <option value="regex">正则</option>
@@ -212,46 +202,36 @@ const GroupCard: FC<{
                   <option value="contains">包含</option>
                 </select>
                 <input
-                  placeholder="规则内容"
+                  className="search-input"
+                  placeholder="输入规则内容"
                   value={newRulePattern}
                   onChange={(e) => setNewRulePattern(e.target.value)}
-                  style={{ flex: 1, fontSize: 12, padding: '2px 4px' }}
+                  style={{ flex: 1, fontSize: 12, padding: '4px 8px' }}
                 />
-                <button
-                  className="btn btn-xs btn-primary"
+                <button className="btn btn-xs btn-primary" style={{ alignSelf: 'flex-end' }}
                   onClick={async () => {
                     if (!newRulePattern.trim()) return;
                     try {
                       await addRule({ ruleType: newRuleType, pattern: newRulePattern.trim() });
                       setNewRulePattern("");
                       setShowAddRule(false);
-                    } catch (e: any) {
-                      alert(e?.toString() || "添加失败");
-                    }
-                  }}
-                >
+                    } catch (e: any) { alert(e?.toString() || "添加失败"); }
+                  }}>
                   添加
                 </button>
               </div>
             )}
 
-            {rulesLoading && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>加载中...</div>}
-
-            {!rulesLoading && rules.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', paddingLeft: 20 }}>暂无规则</div>
+            {rulesLoading && <span className="hint">加载中...</span>}
+            {!rulesLoading && rules.length === 0 && !showAddRule && (
+              <span className="hint">暂无规则，点击上方按钮添加</span>
             )}
-
             {rules.map((rule) => (
-              <div key={rule.id} style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 12, padding: '2px 0 2px 20px',
-              }}>
-                <span style={{
-                  background: 'var(--bg-secondary)', padding: '1px 4px', borderRadius: 3,
+              <div key={rule.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                <span className="hint" style={{
+                  background: 'var(--bg-secondary)', padding: '1px 6px', borderRadius: 4,
                   fontSize: 11, minWidth: 40, textAlign: 'center',
-                }}>
-                  {rule.rule_type}
-                </span>
+                }}>{rule.rule_type}</span>
                 <code style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {rule.pattern}
                 </code>
@@ -263,50 +243,43 @@ const GroupCard: FC<{
             ))}
           </div>
 
-          {/* Examples */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <FileText size={13} />
-              <span style={{ fontWeight: 500, fontSize: 13 }}>示例</span>
-              <button className="btn btn-xs btn-ghost" onClick={() => setShowAddExample(!showAddExample)}>
-                <Plus size={12} /> 添加
+          {/* Examples section */}
+          <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '8px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={14} />
+              <span className="item-label" style={{ margin: 0, flex: 1 }}>示例</span>
+              <button className="btn btn-xs btn-ghost" onClick={() => { setShowAddExample(true); setShowAddRule(false); }}>
+                <Plus size={12} /> 添加示例
               </button>
             </div>
 
             {showAddExample && (
-              <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
                 <textarea
-                  placeholder="示例文本（如 book_id: 123456）"
+                  className="search-input"
+                  placeholder="输入示例文本（如 book_id: 123456）"
                   value={newExampleText}
                   onChange={(e) => setNewExampleText(e.target.value)}
-                  style={{ flex: 1, fontSize: 12, padding: '2px 4px', minHeight: 32, resize: 'vertical' }}
+                  style={{ flex: 1, fontSize: 12, padding: '4px 8px', minHeight: 32, resize: 'vertical' }}
                 />
-                <button
-                  className="btn btn-xs btn-primary"
+                <button className="btn btn-xs btn-primary" style={{ alignSelf: 'flex-end' }}
                   onClick={async () => {
                     if (!newExampleText.trim()) return;
                     await addExample({ exampleText: newExampleText.trim() });
                     setNewExampleText("");
                     setShowAddExample(false);
-                  }}
-                  style={{ alignSelf: 'flex-start' }}
-                >
+                  }}>
                   添加
                 </button>
               </div>
             )}
 
-            {examplesLoading && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>加载中...</div>}
-
-            {!examplesLoading && examples.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', paddingLeft: 20 }}>暂无示例</div>
+            {examplesLoading && <span className="hint">加载中...</span>}
+            {!examplesLoading && examples.length === 0 && !showAddExample && (
+              <span className="hint">暂无示例，点击上方按钮添加</span>
             )}
-
             {examples.map((ex) => (
-              <div key={ex.id} style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                fontSize: 12, padding: '2px 0 2px 20px',
-              }}>
+              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
                 <code style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {ex.example_text}
                 </code>
