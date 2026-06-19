@@ -1,4 +1,5 @@
 import { useState, type FC } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Plus, Trash2, ChevronDown, ChevronRight, Tag, FileText } from "lucide-react";
 import { useSmartGroups, useGroupRules, useGroupExamples } from "../hooks/useSmartGroups";
 import type { SmartGroup } from "../../../shared/types/smartGroup";
@@ -114,6 +115,11 @@ const GroupCard: FC<{
   const [showAddExample, setShowAddExample] = useState(false);
   const [newExampleText, setNewExampleText] = useState("");
 
+  // Tauri WebView2 focus workaround: re-focus window to ensure keyboard events reach the input
+  const ensureFocus = () => {
+    try { getCurrentWindow().setFocus(); } catch {}
+  };
+
   return (
     <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
       {/* Card header */}
@@ -205,6 +211,9 @@ const GroupCard: FC<{
                     placeholder="输入规则内容"
                     value={newRulePattern}
                     onChange={(e) => setNewRulePattern(e.target.value)}
+                    onMouseDown={ensureFocus}
+                    onFocus={ensureFocus}
+                    onClick={ensureFocus}
                     style={{ flex: 1 }}
                   />
                   <button className="btn btn-xs btn-primary"
@@ -260,6 +269,9 @@ const GroupCard: FC<{
                     placeholder="输入示例文本（如 book_id: 123456）"
                     value={newExampleText}
                     onChange={(e) => setNewExampleText(e.target.value)}
+                    onMouseDown={ensureFocus}
+                    onFocus={ensureFocus}
+                    onClick={ensureFocus}
                     style={{ minWidth: 0, width: 0, flex: '1 1 auto', minHeight: 32, resize: 'vertical' }}
                   />
                   <button className="btn btn-xs btn-primary" style={{ alignSelf: 'flex-end' }}
