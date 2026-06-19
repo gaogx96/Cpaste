@@ -851,6 +851,70 @@ impl SqliteClipboardRepository {
         }
         Ok(entries)
     }
+
+    /// Load text-type entries that haven't been classified yet.
+    pub fn get_unclassified_entries_with_conn(
+        &self,
+        conn: &Connection,
+    ) -> Result<Vec<ClipboardEntry>, String> {
+        use rusqlite::params;
+
+        let map_row = |row: &rusqlite::Row| -> rusqlite::Result<ClipboardEntry> {
+            let tags_str: String = row.get(8).unwrap_or_else(|_| "[]".to_string());
+            let tags: Vec<String> = serde_json::from_str(&tags_str).unwrap_or_default();
+            let content_raw: String = row.get(2)?;
+            let preview_raw: String = row.get(6)?;
+            let content = self.maybe_decrypt_text(&content_raw);
+            let preview = self.maybe_decrypt_text(&preview_raw);
+
+            Ok(ClipboardEntry {
+                id: row.get(0)?,
+                content_type: row.get(1)?,
+                content,
+                html_content: row.get::<_, Option<String>>(3).ok().flatten().map(|v| self.maybe_decrypt_text(&v)),
+                source_app: row.get(4)?,
+                timestamp: row.get(5)?,
+                preview,
+                is_pinned: row.get(7)?,
+                tags,
+                use_count: row.get(9)?,
+                is_external: row.get(10)?,
+                pinned_order: row.get(11)?,
+                source_app_path: row.get::<_, Option<String>>(12).ok().flatten(),
+                file_preview_exists: true,
+                smart_group_id: row.get::<_, Option<i64>>(13).ok().flatten(),
+                smart_group_name: row.get::<_, Option<String>>(14).ok().flatten().unwrap_or_default(),
+                note: row.get::<_, Option<String>>(15).ok().flatten().unwrap_or_default(),
+                group_confidence: row.get(16).unwrap_or(0.0),
+                group_reason: row.get::<_, Option<String>>(17).ok().flatten().unwrap_or_default(),
+                group_match_type: row.get::<_, Option<String>>(18).ok().flatten().unwrap_or_default(),
+                group_manual_override: row.get(19).unwrap_or(false),
+            })
+        };
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, content_type, content, html_content, source_app, timestamp, preview,
+                        is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
+                        smart_group_id, smart_group_name, note, group_confidence, group_reason,
+                        group_match_type, group_manual_override
+                 FROM clipboard_history
+                 WHERE smart_group_id IS NULL
+                   AND content_type IN ('text', 'code', 'url', 'rich_text')
+                 ORDER BY timestamp DESC
+                 LIMIT 500"
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map(params![], map_row)
+            .map_err(|e| e.to_string())?;
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row.map_err(|e| e.to_string())?);
+        }
+        Ok(entries)
+    }
 }
 
 impl ClipboardRepository for SqliteClipboardRepository {

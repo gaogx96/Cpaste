@@ -102,6 +102,11 @@ export const updateEntryNote = async (entryId: number, note: string): Promise<vo
   return invoke("update_clipboard_entry_note", { entryId, note });
 };
 
+/** Re-run classification on existing unclassified entries */
+export const reclassifyEntries = async (): Promise<number> => {
+  return invoke("reclassify_entries");
+};
+
 export const getClipboardHistoryByGroup = async (
   groupId: number | null,
   limit?: number,

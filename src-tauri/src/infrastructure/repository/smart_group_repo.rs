@@ -552,6 +552,14 @@ impl SmartGroupRepository {
         Ok(conn.last_insert_rowid())
     }
 
+    pub fn get_unclassified_entries(&self) -> Result<Vec<crate::domain::models::ClipboardEntry>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let repo = crate::infrastructure::repository::clipboard_repo::SqliteClipboardRepository::new(
+            self.conn.clone(),
+        );
+        repo.get_unclassified_entries_with_conn(&conn)
+    }
+
     pub fn set_entry_classification(
         &self,
         entry_id: i64,

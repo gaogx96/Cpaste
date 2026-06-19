@@ -132,6 +132,7 @@ fn main() {
             app::commands::list_smart_groups,
             app::commands::get_smart_group_detail,
             app::commands::get_smart_group_count,
+            app::commands::reclassify_entries,
             app::commands::create_smart_group_rule,
             app::commands::update_smart_group_rule,
             app::commands::delete_smart_group_rule,

@@ -107,6 +107,7 @@ export const useGroupRules = (groupId: number | null) => {
     async (params: { ruleType: string; pattern: string; weight?: number }) => {
       if (groupId === null) return;
       await api.createSmartGroupRule({ groupId, ...params });
+      api.reclassifyEntries().catch(() => {});
       await refresh();
     },
     [groupId, refresh]
@@ -115,6 +116,7 @@ export const useGroupRules = (groupId: number | null) => {
   const removeRule = useCallback(
     async (ruleId: number) => {
       await api.deleteSmartGroupRule(ruleId);
+      api.reclassifyEntries().catch(() => {});
       await refresh();
     },
     [refresh]
@@ -149,6 +151,7 @@ export const useGroupExamples = (groupId: number | null) => {
     async (params: { exampleText: string; note?: string }) => {
       if (groupId === null) return;
       await api.createSmartGroupExample({ groupId, ...params });
+      api.reclassifyEntries().catch(() => {});
       await refresh();
     },
     [groupId, refresh]
@@ -157,6 +160,7 @@ export const useGroupExamples = (groupId: number | null) => {
   const removeExample = useCallback(
     async (exampleId: number) => {
       await api.deleteSmartGroupExample(exampleId);
+      api.reclassifyEntries().catch(() => {});
       await refresh();
     },
     [refresh]

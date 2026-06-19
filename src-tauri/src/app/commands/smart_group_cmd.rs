@@ -1,8 +1,9 @@
 use tauri::State;
 
-use crate::database::DbState;
+use crate::database::{is_text_type, DbState};
 use crate::domain::models::SmartGroup;
 use crate::error::AppResult;
+use crate::services::smart_group_classifier::{self, SmartGroupConfig};
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -175,4 +176,61 @@ pub fn get_clipboard_history_by_group(
     db.smart_group_repo
         .get_entries_by_group(group_id, limit, offset)
         .map_err(|e| crate::error::AppError::Internal(e))
+}
+
+/// Re-run classification on existing entries and update their smart_group_id.
+/// Called after rules/examples change so existing items get matched too.
+#[tauri::command]
+pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
+    // 1. Load groups, rules, examples
+    let groups = db.smart_group_repo
+        .get_enabled_auto_match_groups()
+        .map_err(|e| crate::error::AppError::Internal(e))?;
+
+    if groups.is_empty() {
+        return Ok(0);
+    }
+
+    let group_ids: Vec<i64> = groups.iter().map(|g| g.id).collect();
+
+    let rules = db.smart_group_repo
+        .list_all_rules_for_groups(&group_ids)
+        .map_err(|e| crate::error::AppError::Internal(e))?;
+
+    let examples = db.smart_group_repo
+        .list_all_examples_for_groups(&group_ids)
+        .map_err(|e| crate::error::AppError::Internal(e))?;
+
+    let config = SmartGroupConfig::build(groups, rules, examples);
+
+    // 2. Load all text-type entries that don't have smart_group_id set yet
+    let entries = db.smart_group_repo
+        .get_unclassified_entries()
+        .map_err(|e| crate::error::AppError::Internal(e))?;
+
+    if entries.is_empty() {
+        return Ok(0);
+    }
+
+    let mut updated_count = 0i64;
+
+    for entry in &entries {
+        let result = smart_group_classifier::classify(
+            &entry.content,
+            &entry.content_type,
+            &config,
+            None,
+        );
+
+        if let Some(group_id) = result.smart_group_id {
+            if db.smart_group_repo
+                .assign_entry_to_group(entry.id, group_id, &result.smart_group_name)
+                .is_ok()
+            {
+                updated_count += 1;
+            }
+        }
+    }
+
+    Ok(updated_count)
 }
