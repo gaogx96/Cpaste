@@ -8,6 +8,7 @@ import { translations } from "./locales";
 import AppHeader from "./features/app/components/AppHeader";
 import AppMainContent from "./features/app/components/AppMainContent";
 import { useAppState } from "./features/app/hooks/useAppState";
+import type { SmartGroup } from "./shared/types/smartGroup";
 import { useSettingsPanelProps } from "./features/settings/hooks/useSettingsPanelProps";
 import { useDebounce } from "./shared/hooks/useDebounce";
 import { useHistoryFetch } from "./shared/hooks/useHistoryFetch";
@@ -258,7 +259,9 @@ const App = () => {
     setSoundVolume,
     processingAiId,
     typeFilter,
-    setTypeFilter
+    setTypeFilter,
+    groupFilter,
+    setGroupFilter
   } = appState;
 
   const effectiveShowEmojiPanel = showEmojiPanel && emojiPanelEnabled;
@@ -272,6 +275,10 @@ const App = () => {
   const [quickPasteHintsById, setQuickPasteHintsById] = useState<Record<number, QuickPasteHint>>(
     {}
   );
+  const [smartGroups, setSmartGroups] = useState<SmartGroup[]>([]);
+  useEffect(() => {
+    invoke<SmartGroup[]>("list_smart_groups").then(setSmartGroups).catch(() => {});
+  }, []);
   const PAGE_SIZE = 80;
   const { fetchHistory, loadMoreHistory } = useHistoryFetch({
     debouncedSearch,
@@ -702,7 +709,8 @@ const App = () => {
   const filteredHistory = useFilteredHistory({
     history,
     search,
-    typeFilter
+    typeFilter,
+    groupFilter
   });
 
   const effectiveHasMore = hasMore && filteredHistory.length >= PAGE_SIZE;
@@ -821,6 +829,9 @@ const App = () => {
         settingsTitle={showSettings && settingsSubpage === "advanced" ? t("advanced_settings") : t("settings")}
         typeFilter={typeFilter}
         setTypeFilter={setTypeFilter}
+        groupFilter={groupFilter}
+        setGroupFilter={setGroupFilter}
+        smartGroups={smartGroups}
         onBack={handleHeaderBack}
       />
 

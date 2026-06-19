@@ -181,6 +181,7 @@ export const useAppState = (): AppState => {
   const [aiAssignedProfileTranslate, setAiAssignedProfileTranslate] = useState("default");
   const [processingAiId, setProcessingAiId] = useState<number | null>(null);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [groupFilter, setGroupFilter] = useState<number | null>(null);
 
   return {
     showSettings,
@@ -434,6 +435,8 @@ export const useAppState = (): AppState => {
     processingAiId,
     setProcessingAiId,
     typeFilter,
-    setTypeFilter
+    setTypeFilter,
+    groupFilter,
+    setGroupFilter
   };
 };

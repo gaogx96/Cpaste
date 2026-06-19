@@ -275,4 +275,6 @@ export interface AppState {
   setProcessingAiId: StateSetter<number | null>;
   typeFilter: string | null;
   setTypeFilter: StateSetter<string | null>;
+  groupFilter: number | null;
+  setGroupFilter: StateSetter<number | null>;
 }

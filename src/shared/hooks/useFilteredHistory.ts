@@ -5,18 +5,23 @@ interface UseFilteredHistoryOptions {
   history: ClipboardEntry[];
   search: string;
   typeFilter: string | null;
+  groupFilter: number | null;
 }
 
 export const useFilteredHistory = ({
   history,
   search,
-  typeFilter
+  typeFilter,
+  groupFilter
 }: UseFilteredHistoryOptions) => {
   return useMemo(() => {
     const lowerSearch = search.toLowerCase();
 
     const filtered = history.filter((item) => {
       if (typeFilter && item.content_type !== typeFilter) {
+        return false;
+      }
+      if (groupFilter !== null && item.smart_group_id !== groupFilter) {
         return false;
       }
 
@@ -53,5 +58,5 @@ export const useFilteredHistory = ({
       }
       return b.timestamp - a.timestamp;
     });
-  }, [history, search, typeFilter]);
+  }, [history, search, typeFilter, groupFilter]);
 };

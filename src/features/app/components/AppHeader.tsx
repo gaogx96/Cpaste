@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { getTagColor, getTagTextColor } from "../../../shared/lib/utils";
+import type { SmartGroup } from "../../../shared/types/smartGroup";
 
 interface AppHeaderProps {
   t: (key: string) => string;
@@ -43,6 +44,9 @@ interface AppHeaderProps {
   settingsTitle: string;
   typeFilter: string | null;
   setTypeFilter: (val: string | null) => void;
+  groupFilter: number | null;
+  setGroupFilter: (val: number | null) => void;
+  smartGroups: SmartGroup[];
   onBack: () => void;
 }
 
@@ -75,6 +79,9 @@ const AppHeader = ({
   settingsTitle,
   typeFilter,
   setTypeFilter,
+  groupFilter,
+  setGroupFilter,
+  smartGroups,
   onBack,
 }: AppHeaderProps) => {
   const getTypeName = (type: string) => {
@@ -248,7 +255,7 @@ const AppHeader = ({
                   <button
                     key={t}
                     className={`btn-icon ${typeFilter === t ? 'active' : ''}`}
-                    onClick={() => setTypeFilter(typeFilter === t ? null : t)}
+                    onClick={() => { setTypeFilter(typeFilter === t ? null : t); setGroupFilter(null); }}
                     style={{
                       width: 'auto',
                       padding: '4px 8px',
@@ -261,6 +268,28 @@ const AppHeader = ({
                     title={getTypeName(t)}
                   >
                     {getTypeName(t)}
+                  </button>
+                ))}
+                {smartGroups.filter(g => g.enabled).map(g => (
+                  <button
+                    key={`group-${g.id}`}
+                    className={`btn-icon ${groupFilter === g.id ? 'active' : ''}`}
+                    onClick={() => { setGroupFilter(groupFilter === g.id ? null : g.id); setTypeFilter(null); }}
+                    style={{
+                      width: 'auto',
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      borderRadius: '4px',
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                      opacity: groupFilter === g.id ? 1 : 0.7,
+                      borderLeft: '1px solid var(--border-color)',
+                      marginLeft: smartGroups.filter(g => g.enabled)[0]?.id === g.id ? 6 : 0,
+                      paddingLeft: smartGroups.filter(g => g.enabled)[0]?.id === g.id ? 12 : 8,
+                    }}
+                    title={g.name}
+                  >
+                    {g.name}
                   </button>
                 ))}
               </div>
