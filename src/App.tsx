@@ -9,6 +9,7 @@ import AppHeader from "./features/app/components/AppHeader";
 import AppMainContent from "./features/app/components/AppMainContent";
 import { useAppState } from "./features/app/hooks/useAppState";
 import type { SmartGroup } from "./shared/types/smartGroup";
+import { matchEntriesForGroup } from "./features/smart-groups/api/smartGroupApi";
 import { useSettingsPanelProps } from "./features/settings/hooks/useSettingsPanelProps";
 import { useDebounce } from "./shared/hooks/useDebounce";
 import { useHistoryFetch } from "./shared/hooks/useHistoryFetch";
@@ -715,11 +716,26 @@ const App = () => {
   };
   */
 
+  // When groupFilter is active, match entries against the group's rules in real-time
+  const [matchedGroupEntryIds, setMatchedGroupEntryIds] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    if (groupFilter === null) {
+      setMatchedGroupEntryIds(new Set());
+      return;
+    }
+    const ids = history.filter(e => e.id > 0).map(e => e.id);
+    if (ids.length === 0) return;
+    matchEntriesForGroup(groupFilter, ids).then(matched => {
+      setMatchedGroupEntryIds(new Set(matched));
+    }).catch(() => {});
+  }, [groupFilter, history]);
+
   const filteredHistory = useFilteredHistory({
     history,
     search,
     typeFilter,
-    groupFilter
+    groupFilter,
+    matchedGroupEntryIds
   });
 
   const effectiveHasMore = hasMore && filteredHistory.length >= PAGE_SIZE;

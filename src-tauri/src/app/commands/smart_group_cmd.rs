@@ -323,6 +323,51 @@ pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
     Ok(updated_count)
 }
 
+/// Check which entries match a group's rules. Returns matching entry IDs.
+/// Used by the frontend group filter to reliably show matched content.
+#[tauri::command]
+pub fn match_entries_for_group(
+    db: State<'_, DbState>,
+    group_id: i64,
+    entry_ids: Vec<i64>,
+) -> Result<Vec<i64>, String> {
+    let group = db.smart_group_repo
+        .get_group_by_id(group_id)
+        .map_err(|e| e.to_string())?;
+    let group = match group {
+        Some(g) if g.enabled => g,
+        _ => return Ok(vec![]),
+    };
+
+    let rules = db.smart_group_repo
+        .list_all_rules_for_groups(&[group_id])
+        .map_err(|e| e.to_string())?;
+
+    let examples = db.smart_group_repo
+        .list_all_examples_for_groups(&[group_id])
+        .map_err(|e| e.to_string())?;
+
+    let config = crate::services::smart_group_classifier::SmartGroupConfig::build(
+        vec![group], rules, examples,
+    );
+
+    // Load content for the given entry IDs
+    let entries = db.smart_group_repo
+        .get_entries_by_ids(&entry_ids)
+        .map_err(|e| e.to_string())?;
+
+    let mut matched = Vec::new();
+    for entry in &entries {
+        let result = crate::services::smart_group_classifier::classify(
+            &entry.content, &entry.content_type, &config, None,
+        );
+        if result.smart_group_id == Some(group_id) {
+            matched.push(entry.id);
+        }
+    }
+    Ok(matched)
+}
+
 /// Live-match entries against a group's rules and return the count.
 /// This is called by `get_smart_group_count` and the group filter tab,
 /// so counts are always accurate even if auto-classification didn't run.

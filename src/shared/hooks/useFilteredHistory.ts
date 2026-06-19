@@ -6,13 +6,16 @@ interface UseFilteredHistoryOptions {
   search: string;
   typeFilter: string | null;
   groupFilter: number | null;
+  /** Entry IDs that match the current group filter (live-matched from backend) */
+  matchedGroupEntryIds: Set<number>;
 }
 
 export const useFilteredHistory = ({
   history,
   search,
   typeFilter,
-  groupFilter
+  groupFilter,
+  matchedGroupEntryIds
 }: UseFilteredHistoryOptions) => {
   return useMemo(() => {
     const lowerSearch = search.toLowerCase();
@@ -21,7 +24,7 @@ export const useFilteredHistory = ({
       if (typeFilter && item.content_type !== typeFilter) {
         return false;
       }
-      if (groupFilter !== null && item.smart_group_id !== groupFilter) {
+      if (groupFilter !== null && !matchedGroupEntryIds.has(item.id)) {
         return false;
       }
 
@@ -58,5 +61,5 @@ export const useFilteredHistory = ({
       }
       return b.timestamp - a.timestamp;
     });
-  }, [history, search, typeFilter, groupFilter]);
+  }, [history, search, typeFilter, groupFilter, matchedGroupEntryIds]);
 };
