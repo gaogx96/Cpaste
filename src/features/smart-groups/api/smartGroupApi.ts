@@ -14,7 +14,16 @@ export const createSmartGroup = async (params: {
   is_sensitive?: boolean;
   sort_order?: number;
 }): Promise<number> => {
-  return invoke("create_smart_group", params);
+  return invoke("create_smart_group", {
+    name: params.name,
+    description: params.description,
+    color: params.color,
+    icon: params.icon,
+    enabled: params.enabled,
+    autoMatchEnabled: params.auto_match_enabled,
+    isSensitive: params.is_sensitive,
+    sortOrder: params.sort_order,
+  });
 };
 
 export const updateSmartGroup = async (params: {
@@ -28,7 +37,17 @@ export const updateSmartGroup = async (params: {
   is_sensitive?: boolean;
   sort_order?: number;
 }): Promise<void> => {
-  return invoke("update_smart_group", params);
+  return invoke("update_smart_group", {
+    id: params.id,
+    name: params.name,
+    description: params.description,
+    color: params.color,
+    icon: params.icon,
+    enabled: params.enabled,
+    autoMatchEnabled: params.auto_match_enabled,
+    isSensitive: params.is_sensitive,
+    sortOrder: params.sort_order,
+  });
 };
 
 export const deleteSmartGroup = async (id: number): Promise<void> => {
