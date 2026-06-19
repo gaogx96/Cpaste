@@ -170,36 +170,6 @@ const GroupCard: FC<{
       {/* Expanded content */}
       {expanded && (
         <div style={{ paddingTop: 4 }}>
-          {/* Auto-match & Sensitive toggles */}
-          <div className="setting-item" style={{ borderBottom: 'none', padding: '4px 0' }}>
-            <div className="item-label-group">
-              <span className="item-label">参与自动识别</span>
-              <span className="hint">启用后新剪贴内容自动与此分组规则匹配</span>
-            </div>
-            <label className="switch" onClick={(e) => e.stopPropagation()}>
-              <input className="cb" type="checkbox" checked={group.auto_match_enabled}
-                onChange={async (e) => {
-                  try { await onUpdate({ id: group.id, auto_match_enabled: e.target.checked }); }
-                  catch (err) { alert('操作失败'); }
-                }} />
-              <div className="toggle"><div className="left" /><div className="right" /></div>
-            </label>
-          </div>
-          <div className="setting-item" style={{ borderBottom: 'none', padding: '4px 0' }}>
-            <div className="item-label-group">
-              <span className="item-label">敏感分组</span>
-              <span className="hint">开启后匹配的内容将被标记为敏感</span>
-            </div>
-            <label className="switch" onClick={(e) => e.stopPropagation()}>
-              <input className="cb" type="checkbox" checked={group.is_sensitive}
-                onChange={async (e) => {
-                  try { await onUpdate({ id: group.id, is_sensitive: e.target.checked }); }
-                  catch (err) { alert('操作失败'); }
-                }} />
-              <div className="toggle"><div className="left" /><div className="right" /></div>
-            </label>
-          </div>
-
           {/* Rules section */}
           <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch', borderBottom: 'none', gap: 6, padding: '8px 0' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -120,6 +120,9 @@ pub fn get_smart_group_count(
     db: State<'_, DbState>,
     group_id: i64,
 ) -> AppResult<i64> {
+    // Quick reclassification: match unclassified entries against this group
+    let _ = crate::app::commands::reclassify_single_group(&db, group_id);
+    // Return updated count
     db.smart_group_repo
         .get_group_count(group_id)
         .map_err(|e| crate::error::AppError::Internal(e))
@@ -317,4 +320,52 @@ pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
     }
 
     Ok(updated_count)
+}
+
+/// Helper: reclassify unclassified entries for a single group.
+/// Called by `get_smart_group_count` to ensure counts are up-to-date.
+pub fn reclassify_single_group(
+    db: &State<'_, DbState>,
+    group_id: i64,
+) -> Result<i64, String> {
+    let group = db.smart_group_repo
+        .get_group_by_id(group_id)
+        .map_err(|e| e.to_string())?;
+
+    let group = match group {
+        Some(g) if g.enabled && g.auto_match_enabled => g,
+        _ => return Ok(0),
+    };
+
+    let rules = db.smart_group_repo
+        .list_all_rules_for_groups(&[group_id])
+        .map_err(|e| e.to_string())?;
+
+    let examples = db.smart_group_repo
+        .list_all_examples_for_groups(&[group_id])
+        .map_err(|e| e.to_string())?;
+
+    let config = crate::services::smart_group_classifier::SmartGroupConfig::build(
+        vec![group], rules, examples,
+    );
+
+    let entries = db.smart_group_repo
+        .get_unclassified_entries()
+        .map_err(|e| e.to_string())?;
+
+    let mut updated = 0i64;
+    for entry in &entries {
+        let result = crate::services::smart_group_classifier::classify(
+            &entry.content, &entry.content_type, &config, None,
+        );
+        if result.smart_group_id == Some(group_id) {
+            if db.smart_group_repo
+                .assign_entry_to_group(entry.id, group_id, &result.smart_group_name)
+                .is_ok()
+            {
+                updated += 1;
+            }
+        }
+    }
+    Ok(updated)
 }
