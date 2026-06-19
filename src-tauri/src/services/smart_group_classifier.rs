@@ -58,7 +58,12 @@ impl SmartGroupConfig {
                         .into_iter()
                         .map(|rule| {
                             let regex = if rule.rule_type == "regex" {
-                                Regex::new(&rule.pattern).ok()
+                                let pattern = if rule.pattern.starts_with("(?i)") {
+                                    rule.pattern.clone()
+                                } else {
+                                    format!("(?i){}", rule.pattern)
+                                };
+                                Regex::new(&pattern).ok()
                             } else {
                                 None
                             };
@@ -94,19 +99,19 @@ fn normalize_text(text: &str) -> String {
 /// Base scores per rule type.
 fn base_score(rule_type: &str) -> f64 {
     match rule_type {
-        "regex" => 80.0,
-        "keyword" => 50.0,
-        "prefix" => 45.0,
-        "contains" => 40.0,
-        "suffix" => 35.0,
+        "regex" => 100.0,
+        "keyword" => 70.0,
+        "prefix" => 65.0,
+        "contains" => 60.0,
+        "suffix" => 55.0,
         _ => 0.0,
     }
 }
 
-const GROUP_SCORE_CAP: f64 = 150.0;
-const AUTO_MATCH_THRESHOLD: f64 = 60.0;
-const AMBIGUOUS_GAP: f64 = 15.0;
-const DEFAULT_BUDGET_MS: u64 = 30;
+const GROUP_SCORE_CAP: f64 = 200.0;
+const AUTO_MATCH_THRESHOLD: f64 = 50.0;
+const AMBIGUOUS_GAP: f64 = 20.0;
+const DEFAULT_BUDGET_MS: u64 = 100;
 const MAX_CLASSIFY_CHARS: usize = 5000;
 const MIN_EXAMPLE_LEN: usize = 3;
 
@@ -274,11 +279,11 @@ pub fn classify(
 
             let (includes, template) = example_matches(compiled_example, &norm);
             if includes {
-                score += 40.0;
+                score += 60.0;
                 reasons.push(format!("example_contains:{}", compiled_example.example.example_text));
             }
             if template {
-                score += 60.0;
+                score += 80.0;
                 reasons.push("example_template".to_string());
             }
         }
