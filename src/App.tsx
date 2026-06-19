@@ -276,9 +276,18 @@ const App = () => {
     {}
   );
   const [smartGroups, setSmartGroups] = useState<SmartGroup[]>([]);
-  useEffect(() => {
+  const refreshSmartGroups = useCallback(() => {
     invoke<SmartGroup[]>("list_smart_groups").then(setSmartGroups).catch(() => {});
   }, []);
+  useEffect(() => { refreshSmartGroups(); }, [refreshSmartGroups]);
+  // Refresh when returning from settings (groups may have been edited)
+  const prevShowSettings = useRef(showSettings);
+  useEffect(() => {
+    if (prevShowSettings.current && !showSettings) {
+      refreshSmartGroups();
+    }
+    prevShowSettings.current = showSettings;
+  }, [showSettings, refreshSmartGroups]);
   const PAGE_SIZE = 80;
   const { fetchHistory, loadMoreHistory } = useHistoryFetch({
     debouncedSearch,
