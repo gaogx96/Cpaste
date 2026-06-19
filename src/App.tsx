@@ -841,6 +841,7 @@ const App = () => {
         groupFilter={groupFilter}
         setGroupFilter={setGroupFilter}
         smartGroups={smartGroups}
+        fetchHistory={fetchHistory}
         onBack={handleHeaderBack}
       />
 

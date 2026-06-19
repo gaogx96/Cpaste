@@ -120,12 +120,13 @@ pub fn get_smart_group_count(
     db: State<'_, DbState>,
     group_id: i64,
 ) -> AppResult<i64> {
-    // Quick reclassification: match unclassified entries against this group
-    let _ = crate::app::commands::reclassify_single_group(&db, group_id);
-    // Return updated count
-    db.smart_group_repo
-        .get_group_count(group_id)
-        .map_err(|e| crate::error::AppError::Internal(e))
+    // Count entries whose content matches this group's rules (live matching)
+    match live_match_count(&db, group_id) {
+        Ok(count) => Ok(count),
+        Err(_) => db.smart_group_repo
+            .get_group_count(group_id)
+            .map_err(|e| crate::error::AppError::Internal(e))
+    }
 }
 
 // ─── Clipboard Entry Group Operations ───
@@ -320,6 +321,52 @@ pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
     }
 
     Ok(updated_count)
+}
+
+/// Live-match entries against a group's rules and return the count.
+/// This is called by `get_smart_group_count` and the group filter tab,
+/// so counts are always accurate even if auto-classification didn't run.
+fn live_match_count(
+    db: &State<'_, DbState>,
+    group_id: i64,
+) -> Result<i64, String> {
+    let group = db.smart_group_repo
+        .get_group_by_id(group_id)
+        .map_err(|e| e.to_string())?;
+    let group = match group {
+        Some(g) if g.enabled => g,
+        _ => return Ok(0),
+    };
+
+    let rules = db.smart_group_repo
+        .list_all_rules_for_groups(&[group_id])
+        .map_err(|e| e.to_string())?;
+
+    let examples = db.smart_group_repo
+        .list_all_examples_for_groups(&[group_id])
+        .map_err(|e| e.to_string())?;
+
+    let config = crate::services::smart_group_classifier::SmartGroupConfig::build(
+        vec![group], rules, examples,
+    );
+
+    let entries = db.smart_group_repo
+        .get_unclassified_entries()
+        .map_err(|e| e.to_string())?;
+
+    let mut count = 0i64;
+    for entry in &entries {
+        let result = crate::services::smart_group_classifier::classify(
+            &entry.content, &entry.content_type, &config, None,
+        );
+        if result.smart_group_id == Some(group_id) {
+            count += 1;
+            // Also update the entry so subsequent queries are fast
+            let _ = db.smart_group_repo
+                .assign_entry_to_group(entry.id, group_id, &result.smart_group_name);
+        }
+    }
+    Ok(count)
 }
 
 /// Helper: reclassify unclassified entries for a single group.

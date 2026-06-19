@@ -47,6 +47,7 @@ interface AppHeaderProps {
   groupFilter: number | null;
   setGroupFilter: (val: number | null) => void;
   smartGroups: SmartGroup[];
+  fetchHistory?: () => Promise<void>;
   onBack: () => void;
 }
 
@@ -82,6 +83,7 @@ const AppHeader = ({
   groupFilter,
   setGroupFilter,
   smartGroups,
+  fetchHistory,
   onBack,
 }: AppHeaderProps) => {
   const getTypeName = (type: string) => {
@@ -274,7 +276,7 @@ const AppHeader = ({
                   <button
                     key={`group-${g.id}`}
                     className={`btn-icon ${groupFilter === g.id ? 'active' : ''}`}
-                    onClick={() => { setGroupFilter(groupFilter === g.id ? null : g.id); setTypeFilter(null); }}
+                    onClick={() => { setGroupFilter(groupFilter === g.id ? null : g.id); setTypeFilter(null); fetchHistory?.(); }}
                     style={{
                       width: 'auto',
                       padding: '4px 8px',
