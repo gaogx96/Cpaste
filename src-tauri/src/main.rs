@@ -133,7 +133,6 @@ fn main() {
             app::commands::get_smart_group_detail,
             app::commands::get_smart_group_count,
             app::commands::reclassify_entries,
-            app::commands::match_entries_for_group,
             app::commands::export_group_markdown,
             app::commands::create_smart_group_rule,
             app::commands::update_smart_group_rule,

@@ -121,14 +121,6 @@ export const updateEntryNote = async (entryId: number, note: string): Promise<vo
   return invoke("update_clipboard_entry_note", { entryId, note });
 };
 
-/** Check which of the given entry IDs match a group's rules (live matching) */
-export const matchEntriesForGroup = async (
-  groupId: number,
-  entryIds: number[]
-): Promise<number[]> => {
-  return invoke("match_entries_for_group", { groupId, entryIds });
-};
-
 /** Re-run classification on existing unclassified entries */
 export const reclassifyEntries = async (): Promise<number> => {
   return invoke("reclassify_entries");

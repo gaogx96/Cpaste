@@ -120,13 +120,12 @@ pub fn get_smart_group_count(
     db: State<'_, DbState>,
     group_id: i64,
 ) -> AppResult<i64> {
-    // Count entries whose content matches this group's rules (live matching)
-    match live_match_count(&db, group_id) {
-        Ok(count) => Ok(count),
-        Err(_) => db.smart_group_repo
-            .get_group_count(group_id)
-            .map_err(|e| crate::error::AppError::Internal(e))
-    }
+    // Reclassify unclassified entries to get an accurate count
+    let _ = reclassify_unclassified(&db, group_id);
+    // Return the count from DB
+    db.smart_group_repo
+        .get_group_count(group_id)
+        .map_err(|e| crate::error::AppError::Internal(e))
 }
 
 // ─── Clipboard Entry Group Operations ───
@@ -323,141 +322,53 @@ pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
     Ok(updated_count)
 }
 
-/// Check which entries match a group's rules. Returns matching entry IDs.
-/// Used by the frontend group filter to reliably show matched content.
-#[tauri::command]
-pub fn match_entries_for_group(
-    db: State<'_, DbState>,
-    group_id: i64,
-    entry_ids: Vec<i64>,
-) -> Result<Vec<i64>, String> {
-    let group = db.smart_group_repo
-        .get_group_by_id(group_id)
-        .map_err(|e| e.to_string())?;
-    let group = match group {
-        Some(g) if g.enabled => g,
-        _ => return Ok(vec![]),
-    };
-
-    let rules = db.smart_group_repo
-        .list_all_rules_for_groups(&[group_id])
-        .map_err(|e| e.to_string())?;
-
-    let examples = db.smart_group_repo
-        .list_all_examples_for_groups(&[group_id])
-        .map_err(|e| e.to_string())?;
-
-    let config = crate::services::smart_group_classifier::SmartGroupConfig::build(
-        vec![group], rules, examples,
-    );
-
-    // Load content for the given entry IDs
-    let entries = db.smart_group_repo
-        .get_entries_by_ids(&entry_ids)
-        .map_err(|e| e.to_string())?;
-
-    let mut matched = Vec::new();
-    for entry in &entries {
-        let result = crate::services::smart_group_classifier::classify(
-            &entry.content, &entry.content_type, &config, None,
-        );
-        if result.smart_group_id == Some(group_id) {
-            matched.push(entry.id);
-        }
-    }
-    Ok(matched)
-}
-
-/// Live-match entries against a group's rules and return the count.
-/// This is called by `get_smart_group_count` and the group filter tab,
-/// so counts are always accurate even if auto-classification didn't run.
-fn live_match_count(
+/// Simple reclassification: match all unclassified entries against all enabled groups.
+/// This ensures `smart_group_id` is set on matching entries so the frontend filter works.
+pub fn reclassify_unclassified(
     db: &State<'_, DbState>,
-    group_id: i64,
-) -> Result<i64, String> {
-    let group = db.smart_group_repo
-        .get_group_by_id(group_id)
-        .map_err(|e| e.to_string())?;
-    let group = match group {
-        Some(g) if g.enabled => g,
-        _ => return Ok(0),
+    target_group_id: i64,
+) -> i64 {
+    let groups = match db.smart_group_repo.get_enabled_auto_match_groups() {
+        Ok(g) => g,
+        Err(_) => return 0,
+    };
+    if groups.is_empty() {
+        return 0;
+    }
+    // Only keep the target group
+    let group = match groups.into_iter().find(|g| g.id == target_group_id) {
+        Some(g) => g,
+        None => return 0,
     };
 
-    let rules = db.smart_group_repo
-        .list_all_rules_for_groups(&[group_id])
-        .map_err(|e| e.to_string())?;
-
-    let examples = db.smart_group_repo
-        .list_all_examples_for_groups(&[group_id])
-        .map_err(|e| e.to_string())?;
+    let rules = match db.smart_group_repo.list_all_rules_for_groups(&[target_group_id]) {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+    let examples = match db.smart_group_repo.list_all_examples_for_groups(&[target_group_id]) {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
 
     let config = crate::services::smart_group_classifier::SmartGroupConfig::build(
         vec![group], rules, examples,
     );
 
-    let entries = db.smart_group_repo
-        .get_unclassified_entries()
-        .map_err(|e| e.to_string())?;
+    let entries = match db.smart_group_repo.get_unclassified_entries() {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
 
     let mut count = 0i64;
     for entry in &entries {
         let result = crate::services::smart_group_classifier::classify(
             &entry.content, &entry.content_type, &config, None,
         );
-        if result.smart_group_id == Some(group_id) {
-            count += 1;
-            // Also update the entry so subsequent queries are fast
+        if result.smart_group_id == Some(target_group_id) {
             let _ = db.smart_group_repo
-                .assign_entry_to_group(entry.id, group_id, &result.smart_group_name);
+                .assign_entry_to_group(entry.id, target_group_id, &result.smart_group_name);
+            count += 1;
         }
     }
-    Ok(count)
-}
-
-/// Helper: reclassify unclassified entries for a single group.
-/// Called by `get_smart_group_count` to ensure counts are up-to-date.
-pub fn reclassify_single_group(
-    db: &State<'_, DbState>,
-    group_id: i64,
-) -> Result<i64, String> {
-    let group = db.smart_group_repo
-        .get_group_by_id(group_id)
-        .map_err(|e| e.to_string())?;
-
-    let group = match group {
-        Some(g) if g.enabled && g.auto_match_enabled => g,
-        _ => return Ok(0),
-    };
-
-    let rules = db.smart_group_repo
-        .list_all_rules_for_groups(&[group_id])
-        .map_err(|e| e.to_string())?;
-
-    let examples = db.smart_group_repo
-        .list_all_examples_for_groups(&[group_id])
-        .map_err(|e| e.to_string())?;
-
-    let config = crate::services::smart_group_classifier::SmartGroupConfig::build(
-        vec![group], rules, examples,
-    );
-
-    let entries = db.smart_group_repo
-        .get_unclassified_entries()
-        .map_err(|e| e.to_string())?;
-
-    let mut updated = 0i64;
-    for entry in &entries {
-        let result = crate::services::smart_group_classifier::classify(
-            &entry.content, &entry.content_type, &config, None,
-        );
-        if result.smart_group_id == Some(group_id) {
-            if db.smart_group_repo
-                .assign_entry_to_group(entry.id, group_id, &result.smart_group_name)
-                .is_ok()
-            {
-                updated += 1;
-            }
-        }
-    }
-    Ok(updated)
+    count
 }

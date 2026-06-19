@@ -552,17 +552,6 @@ impl SmartGroupRepository {
         Ok(conn.last_insert_rowid())
     }
 
-    pub fn get_entries_by_ids(&self, ids: &[i64]) -> Result<Vec<crate::domain::models::ClipboardEntry>, String> {
-        if ids.is_empty() {
-            return Ok(vec![]);
-        }
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        let repo = crate::infrastructure::repository::clipboard_repo::SqliteClipboardRepository::new(
-            self.conn.clone(),
-        );
-        repo.get_entries_by_ids_with_conn(&conn, ids)
-    }
-
     pub fn get_unclassified_entries(&self) -> Result<Vec<crate::domain::models::ClipboardEntry>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let repo = crate::infrastructure::repository::clipboard_repo::SqliteClipboardRepository::new(
