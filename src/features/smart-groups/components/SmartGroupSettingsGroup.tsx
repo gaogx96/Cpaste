@@ -2,6 +2,7 @@ import { useState, type FC } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Plus, Trash2, ChevronDown, ChevronRight, Tag, FileText } from "lucide-react";
 import { useSmartGroups, useGroupRules, useGroupExamples } from "../hooks/useSmartGroups";
+import * as api from "../api/smartGroupApi";
 import type { SmartGroup } from "../../../shared/types/smartGroup";
 
 interface SmartGroupSettingsGroupProps {
@@ -146,8 +147,21 @@ const GroupCard: FC<{
             />
             <div className="toggle"><div className="left" /><div className="right" /></div>
           </label>
+          <button className="btn btn-xs btn-ghost" title="导出为 Markdown"
+            onClick={async (e) => {
+              e.stopPropagation();
+              try {
+                const path = await api.exportGroupMarkdown(group.id);
+                if (path) alert(`导出成功：${path}`);
+              } catch (e: any) {
+                if (e !== '已取消') alert(e?.toString() || '导出失败');
+              }
+            }}>
+            <FileText size={12} />
+          </button>
           <button className="btn btn-xs btn-ghost" title="删除"
-            onClick={async () => {
+            onClick={async (e) => {
+              e.stopPropagation();
               if (confirm(`确定删除分组「${group.name}」？`)) await onDelete(group.id);
             }}
             style={{ color: 'var(--danger-color, #ef4444)' }}>

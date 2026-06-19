@@ -4,6 +4,7 @@ use crate::database::{is_text_type, DbState};
 use crate::domain::models::SmartGroup;
 use crate::error::AppResult;
 use crate::services::smart_group_classifier::{self, SmartGroupConfig};
+use tauri_plugin_dialog::DialogExt;
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -176,6 +177,89 @@ pub fn get_clipboard_history_by_group(
     db.smart_group_repo
         .get_entries_by_group(group_id, limit, offset)
         .map_err(|e| crate::error::AppError::Internal(e))
+}
+
+/// Export all entries in a smart group as a Markdown file.
+#[tauri::command]
+pub fn export_group_markdown(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    group_id: i64,
+) -> Result<String, String> {
+    let entries = db.smart_group_repo
+        .get_entries_by_group(Some(group_id), 10000, 0)
+        .map_err(|e| e.to_string())?;
+
+    let group_name = db.smart_group_repo
+        .get_group_by_id(group_id)
+        .map_err(|e| e.to_string())?
+        .map(|g| g.name)
+        .unwrap_or_else(|| format!("group-{}", group_id));
+
+    if entries.is_empty() {
+        return Err("该分组下没有数据".to_string());
+    }
+
+    let mut md = String::new();
+    md.push_str(&format!("# {}\n\n", group_name));
+    md.push_str(&format!("> 导出时间：{}\n\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
+    md.push_str(&format!("> 条目数：{}\n\n---\n\n", entries.len()));
+
+    for (i, entry) in entries.iter().enumerate() {
+        let ts = chrono::DateTime::from_timestamp_millis(entry.timestamp)
+            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        md.push_str(&format!("## {}  `{}`\n\n", i + 1, entry.content_type));
+        md.push_str(&format!("- **来源应用**: {}\n", entry.source_app));
+        md.push_str(&format!("- **时间**: {}\n", ts));
+        if !entry.note.is_empty() {
+            md.push_str(&format!("- **备注**: {}\n", entry.note));
+        }
+        if entry.group_confidence > 0.0 {
+            md.push_str(&format!("- **匹配置信度**: {:.0}%\n", entry.group_confidence * 100.0));
+        }
+        if !entry.group_reason.is_empty() {
+            md.push_str(&format!("- **匹配原因**: {}\n", entry.group_reason));
+        }
+        md.push_str("\n");
+
+        if entry.content_type == "image" {
+            md.push_str(&format!("_图片: {}_\n\n", entry.content.chars().take(80).collect::<String>()));
+        } else if entry.content_type == "file" || entry.content_type == "video" {
+            md.push_str(&format!("```\n{}\n```\n\n", entry.content));
+        } else {
+            let text = entry.content.chars().take(2000).collect::<String>();
+            let lang = if entry.content_type == "code" { "" } else { "text" };
+            md.push_str(&format!("```{}\n{}\n```\n\n", lang, text));
+            if entry.content.len() > 2000 {
+                md.push_str("> *内容已截断*\n\n");
+            }
+        }
+        md.push_str("---\n\n");
+    }
+
+    let default_name = format!("{}_{}.md",
+        group_name.replace(['\\', '/', ':', '*', '?', '"', '<', '>', '|'], "_"),
+        chrono::Local::now().format("%Y%m%d")
+    );
+
+    // Show save dialog and write file
+    let file_path = app.dialog()
+        .file()
+        .add_filter("Markdown", &["md"])
+        .set_file_name(&default_name)
+        .blocking_save_file();
+
+    match file_path {
+        Some(path) => {
+            let path_str = path.to_string();
+            std::fs::write(&path_str, &md)
+                .map_err(|e| format!("写入文件失败: {}", e))?;
+            Ok(path_str)
+        }
+        None => Err("已取消".to_string()),
+    }
 }
 
 /// Re-run classification on existing entries and update their smart_group_id.
