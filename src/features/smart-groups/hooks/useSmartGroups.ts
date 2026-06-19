@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { SmartGroup, SmartGroupRule, SmartGroupExample } from "../../../shared/types/smartGroup";
+import type { SmartGroup, SmartGroupRule } from "../../../shared/types/smartGroup";
 import * as api from "../api/smartGroupApi";
 
 export const useSmartGroups = () => {
@@ -107,7 +107,7 @@ export const useGroupRules = (groupId: number | null) => {
     async (params: { ruleType: string; pattern: string; weight?: number }) => {
       if (groupId === null) return;
       await api.createSmartGroupRule({ groupId, ...params });
-      api.reclassifyEntries().catch(() => {});
+      await api.reclassifyEntries().catch(() => {});
       await refresh();
     },
     [groupId, refresh]
@@ -116,55 +116,11 @@ export const useGroupRules = (groupId: number | null) => {
   const removeRule = useCallback(
     async (ruleId: number) => {
       await api.deleteSmartGroupRule(ruleId);
-      api.reclassifyEntries().catch(() => {});
+      await api.reclassifyEntries().catch(() => {});
       await refresh();
     },
     [refresh]
   );
 
   return { rules, loading, refresh, addRule, removeRule };
-};
-
-/** Hook for managing examples of a specific group */
-export const useGroupExamples = (groupId: number | null) => {
-  const [examples, setExamples] = useState<SmartGroupExample[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const refresh = useCallback(async () => {
-    if (groupId === null) return;
-    setLoading(true);
-    try {
-      const list = await api.listSmartGroupExamples(groupId);
-      setExamples(list);
-    } catch (e) {
-      console.error("Failed to load examples", e);
-    } finally {
-      setLoading(false);
-    }
-  }, [groupId]);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  const addExample = useCallback(
-    async (params: { exampleText: string; note?: string }) => {
-      if (groupId === null) return;
-      await api.createSmartGroupExample({ groupId, ...params });
-      api.reclassifyEntries().catch(() => {});
-      await refresh();
-    },
-    [groupId, refresh]
-  );
-
-  const removeExample = useCallback(
-    async (exampleId: number) => {
-      await api.deleteSmartGroupExample(exampleId);
-      api.reclassifyEntries().catch(() => {});
-      await refresh();
-    },
-    [refresh]
-  );
-
-  return { examples, loading, refresh, addExample, removeExample };
 };

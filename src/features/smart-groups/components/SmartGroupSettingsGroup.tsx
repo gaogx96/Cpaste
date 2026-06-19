@@ -1,7 +1,7 @@
 import { useState, type FC } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Plus, Trash2, ChevronDown, ChevronRight, Tag, FileText } from "lucide-react";
-import { useSmartGroups, useGroupRules, useGroupExamples } from "../hooks/useSmartGroups";
+import { useSmartGroups, useGroupRules } from "../hooks/useSmartGroups";
 import * as api from "../api/smartGroupApi";
 import type { SmartGroup } from "../../../shared/types/smartGroup";
 
@@ -108,13 +108,10 @@ const GroupCard: FC<{
   onDelete: (id: number) => Promise<void>;
 }> = ({ group, expanded, onToggleExpand, onUpdate, onDelete }) => {
   const { rules, loading: rulesLoading, addRule, removeRule } = useGroupRules(expanded ? group.id : null);
-  const { examples, loading: examplesLoading, addExample, removeExample } = useGroupExamples(expanded ? group.id : null);
 
   const [showAddRule, setShowAddRule] = useState(false);
   const [newRuleType, setNewRuleType] = useState("keyword");
   const [newRulePattern, setNewRulePattern] = useState("");
-  const [showAddExample, setShowAddExample] = useState(false);
-  const [newExampleText, setNewExampleText] = useState("");
 
   // Tauri WebView2 focus workaround: re-focus window to ensure keyboard events reach the input
   const ensureFocus = () => {
@@ -179,9 +176,12 @@ const GroupCard: FC<{
               <span className="item-label">参与自动识别</span>
               <span className="hint">启用后新剪贴内容自动与此分组规则匹配</span>
             </div>
-            <label className="switch">
+            <label className="switch" onClick={(e) => e.stopPropagation()}>
               <input className="cb" type="checkbox" checked={group.auto_match_enabled}
-                onChange={async (e) => { await onUpdate({ id: group.id, auto_match_enabled: e.target.checked }); }} />
+                onChange={async (e) => {
+                  try { await onUpdate({ id: group.id, auto_match_enabled: e.target.checked }); }
+                  catch (err) { alert('操作失败'); }
+                }} />
               <div className="toggle"><div className="left" /><div className="right" /></div>
             </label>
           </div>
@@ -190,9 +190,12 @@ const GroupCard: FC<{
               <span className="item-label">敏感分组</span>
               <span className="hint">开启后匹配的内容将被标记为敏感</span>
             </div>
-            <label className="switch">
+            <label className="switch" onClick={(e) => e.stopPropagation()}>
               <input className="cb" type="checkbox" checked={group.is_sensitive}
-                onChange={async (e) => { await onUpdate({ id: group.id, is_sensitive: e.target.checked }); }} />
+                onChange={async (e) => {
+                  try { await onUpdate({ id: group.id, is_sensitive: e.target.checked }); }
+                  catch (err) { alert('操作失败'); }
+                }} />
               <div className="toggle"><div className="left" /><div className="right" /></div>
             </label>
           </div>
@@ -202,7 +205,7 @@ const GroupCard: FC<{
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Tag size={14} />
               <span className="item-label" style={{ margin: 0, flex: 1 }}>匹配规则</span>
-              <button className="btn btn-xs btn-ghost" onClick={() => { setShowAddRule(true); setShowAddExample(false); }}>
+              <button className="btn btn-xs btn-ghost" onClick={() => setShowAddRule(true)}>
                 <Plus size={12} /> 添加规则
               </button>
             </div>
@@ -266,57 +269,6 @@ const GroupCard: FC<{
             ))}
           </div>
 
-          {/* Examples section */}
-          <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6, padding: '8px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FileText size={14} />
-              <span className="item-label" style={{ margin: 0, flex: 1 }}>示例</span>
-              <button className="btn btn-xs btn-ghost" onClick={() => { setShowAddExample(true); setShowAddRule(false); }}>
-                <Plus size={12} /> 添加示例
-              </button>
-            </div>
-
-            {showAddExample && (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', gap: 4, flex: '1 1 100%' }}>
-                  <textarea
-                    placeholder="输入示例文本（如 book_id: 123456）"
-                    value={newExampleText}
-                    onChange={(e) => setNewExampleText(e.target.value)}
-                    onMouseDown={ensureFocus}
-                    onFocus={ensureFocus}
-                    onClick={ensureFocus}
-                    style={{ minWidth: 0, width: 0, flex: '1 1 auto', minHeight: 32, resize: 'vertical' }}
-                  />
-                  <button className="btn btn-xs btn-primary" style={{ alignSelf: 'flex-end' }}
-                    onClick={async () => {
-                      if (!newExampleText.trim()) return;
-                      await addExample({ exampleText: newExampleText.trim() });
-                      setNewExampleText("");
-                      setShowAddExample(false);
-                    }}>
-                    添加
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {examplesLoading && <span className="hint">加载中...</span>}
-            {!examplesLoading && examples.length === 0 && !showAddExample && (
-              <span className="hint">暂无示例，点击上方按钮添加</span>
-            )}
-            {examples.map((ex) => (
-              <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                <code style={{ flex: 1, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {ex.example_text}
-                </code>
-                <button className="btn btn-xs btn-ghost" onClick={() => removeExample(ex.id)}
-                  style={{ color: 'var(--danger-color, #ef4444)' }}>
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
       )}
     </div>
