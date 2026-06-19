@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::database::{is_text_type, DbState};
+use crate::database::DbState;
 use crate::domain::models::SmartGroup;
 use crate::error::AppResult;
 use crate::services::smart_group_classifier::{self, SmartGroupConfig};
