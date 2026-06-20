@@ -3,7 +3,10 @@ use tauri::State;
 use crate::database::DbState;
 use crate::domain::models::SmartGroup;
 use crate::error::AppResult;
+use crate::app_state::SessionHistory;
 use crate::services::smart_group_classifier::{self, SmartGroupConfig};
+use std::io::Write;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 fn now_ms() -> i64 {
@@ -117,15 +120,20 @@ pub fn get_smart_group_detail(db: State<'_, DbState>, id: i64) -> AppResult<Opti
 
 #[tauri::command]
 pub fn get_smart_group_count(
+    app: tauri::AppHandle,
     db: State<'_, DbState>,
     group_id: i64,
 ) -> AppResult<i64> {
-    // Reclassify unclassified entries to get an accurate count
-    let _ = reclassify_unclassified(&db, group_id);
-    // Return the count from DB
-    db.smart_group_repo
-        .get_group_count(group_id)
-        .map_err(|e| crate::error::AppError::Internal(e))
+    // 1. Reclassify (updates both DB and session entries)
+    let reclassified = reclassify_unclassified_with_session(&app, &db, group_id);
+    // 2. Count session entries that match (this is what the frontend filter sees)
+    let session = app.state::<SessionHistory>();
+    let total_count = {
+        let guard = session.0.lock().unwrap();
+        guard.iter().filter(|e| e.smart_group_id == Some(group_id)).count() as i64
+    };
+    println!("[GROUP_DEBUG] Final count: session={} (reclassified={})", total_count, reclassified);
+    Ok(total_count)
 }
 
 // ─── Clipboard Entry Group Operations ───
@@ -189,9 +197,24 @@ pub fn export_group_markdown(
     db: State<'_, DbState>,
     group_id: i64,
 ) -> Result<String, String> {
-    let entries = db.smart_group_repo
+    let mut entries = db.smart_group_repo
         .get_entries_by_group(Some(group_id), 10000, 0)
         .map_err(|e| e.to_string())?;
+
+    // Also include session entries that match this group
+    let session = app.state::<SessionHistory>();
+    {
+        let guard = session.0.lock().unwrap();
+        for entry in guard.iter() {
+            if entry.smart_group_id == Some(group_id) {
+                entries.push(entry.clone());
+            }
+        }
+    }
+    // Deduplicate by ID
+    entries.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
+    let mut seen = std::collections::HashSet::new();
+    entries.retain(|e| seen.insert(e.id));
 
     let group_name = db.smart_group_repo
         .get_group_by_id(group_id)
@@ -247,22 +270,10 @@ pub fn export_group_markdown(
         chrono::Local::now().format("%Y%m%d")
     );
 
-    // Show save dialog and write file
-    let file_path = app.dialog()
-        .file()
-        .add_filter("Markdown", &["md"])
-        .set_file_name(&default_name)
-        .blocking_save_file();
-
-    match file_path {
-        Some(path) => {
-            let path_str = path.to_string();
-            std::fs::write(&path_str, &md)
-                .map_err(|e| format!("写入文件失败: {}", e))?;
-            Ok(path_str)
-        }
-        None => Err("已取消".to_string()),
-    }
+    Ok(serde_json::json!({
+        "content": md,
+        "filename": default_name
+    }).to_string())
 }
 
 /// Re-run classification on existing entries and update their smart_group_id.
@@ -322,27 +333,33 @@ pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
     Ok(updated_count)
 }
 
-/// Simple reclassification: match all unclassified entries against all enabled groups.
-/// This ensures `smart_group_id` is set on matching entries so the frontend filter works.
-pub fn reclassify_unclassified(
+/// Simple reclassification: match DB entries + session entries against a group.
+/// Session entries are in-memory and not in the database, so we must process them separately.
+pub fn reclassify_unclassified_with_session(
+    app: &tauri::AppHandle,
     db: &State<'_, DbState>,
     target_group_id: i64,
 ) -> i64 {
-    let groups = match db.smart_group_repo.get_enabled_auto_match_groups() {
-        Ok(g) => g,
-        Err(_) => return 0,
-    };
-    if groups.is_empty() {
-        return 0;
-    }
-    // Only keep the target group
-    let group = match groups.into_iter().find(|g| g.id == target_group_id) {
-        Some(g) => g,
-        None => return 0,
+    println!("[GROUP_DEBUG] reclassify_unclassified called for group {}", target_group_id);
+    let mut group = match db.smart_group_repo.get_group_by_id(target_group_id) {
+        Ok(Some(g)) => {
+            println!("[GROUP_DEBUG] Loaded group: id={}, name={}, enabled={}, auto_match={}",
+                g.id, g.name, g.enabled, g.auto_match_enabled);
+            if !g.enabled { println!("[GROUP_DEBUG] Group disabled"); return 0; }
+            g
+        }
+        Ok(None) => { println!("[GROUP_DEBUG] Group not found"); return 0; }
+        Err(e) => { println!("[GROUP_DEBUG] Error: {}", e); return 0; }
     };
 
+    if !group.auto_match_enabled {
+        println!("[GROUP_DEBUG] Fixing auto_match_enabled=true");
+        group.auto_match_enabled = true;
+        let _ = db.smart_group_repo.update_group(&group);
+    }
+
     let rules = match db.smart_group_repo.list_all_rules_for_groups(&[target_group_id]) {
-        Ok(r) => r,
+        Ok(r) => { for rule in &r { println!("[GROUP_DEBUG] Rule: {} / {}", rule.rule_type, rule.pattern); } r }
         Err(_) => return 0,
     };
     let examples = match db.smart_group_repo.list_all_examples_for_groups(&[target_group_id]) {
@@ -354,21 +371,66 @@ pub fn reclassify_unclassified(
         vec![group], rules, examples,
     );
 
-    let entries = match db.smart_group_repo.get_unclassified_entries() {
-        Ok(e) => e,
-        Err(_) => return 0,
+    // 1. Process DB entries (persistent mode)
+    let mut count = 0i64;
+    if let Ok(entries) = db.smart_group_repo.get_unclassified_entries() {
+        println!("[GROUP_DEBUG] DB unclassified: {}", entries.len());
+        for entry in &entries {
+            let result = crate::services::smart_group_classifier::classify(
+                &entry.content, &entry.content_type, &config, None,
+            );
+            if result.smart_group_id == Some(target_group_id) {
+                let _ = db.smart_group_repo.assign_entry_to_group(
+                    entry.id, target_group_id, &result.smart_group_name);
+                count += 1;
+            }
+        }
+    }
+
+    // 2. Process session entries (non-persistent mode)
+    let session = app.state::<SessionHistory>();
+    let mut session_entries: Vec<_> = {
+        let guard = session.0.lock().unwrap();
+        guard.iter().cloned().collect()
     };
 
-    let mut count = 0i64;
-    for entry in &entries {
+    println!("[GROUP_DEBUG] Session entries: {}", session_entries.len());
+    let session_matched = session_entries.iter_mut().filter_map(|entry| {
         let result = crate::services::smart_group_classifier::classify(
             &entry.content, &entry.content_type, &config, None,
         );
         if result.smart_group_id == Some(target_group_id) {
-            let _ = db.smart_group_repo
-                .assign_entry_to_group(entry.id, target_group_id, &result.smart_group_name);
-            count += 1;
+            entry.smart_group_id = Some(target_group_id);
+            entry.smart_group_name = result.smart_group_name.clone();
+            Some(entry.id)
+        } else {
+            None
+        }
+    }).count();
+
+    // Update session entries in-place with classified group info and emit events
+    {
+        let mut guard = session.0.lock().unwrap();
+        for entry in guard.iter_mut() {
+            if let Some(s_entry) = session_entries.iter().find(|s| s.id == entry.id) {
+                if s_entry.smart_group_id.is_some() {
+                    entry.smart_group_id = s_entry.smart_group_id;
+                    entry.smart_group_name.clone_from(&s_entry.smart_group_name);
+                    // Notify frontend of the update
+                    let _ = app.emit("clipboard-updated", s_entry.clone());
+                }
+            }
         }
     }
-    count
+
+    println!("[GROUP_DEBUG] Matched DB={}, session={}", count, session_matched);
+    count + session_matched as i64
+}
+
+/// Simple helper: write content to a file (used for export).
+#[tauri::command]
+pub fn write_file(path: String, content: String) -> Result<(), String> {
+    let mut file = std::fs::File::create(&path).map_err(|e| format!("创建文件失败: {}", e))?;
+    file.write_all(content.as_bytes()).map_err(|e| format!("写入文件失败: {}", e))?;
+    Ok(())
 }

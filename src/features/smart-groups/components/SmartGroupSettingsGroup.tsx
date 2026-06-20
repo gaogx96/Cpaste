@@ -133,9 +133,6 @@ const GroupCard: FC<{
           background: group.color || '#64748b', flexShrink: 0,
         }} />
         <span className="item-label" style={{ flex: 1, margin: 0 }}>{group.name}</span>
-        {group.entry_count !== undefined && (
-          <span className="hint">{group.entry_count} 条</span>
-        )}
         <div style={{ display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
           <label className="switch" style={{ margin: 0 }}>
             <input
@@ -148,10 +145,20 @@ const GroupCard: FC<{
             onClick={async (e) => {
               e.stopPropagation();
               try {
-                const path = await api.exportGroupMarkdown(group.id);
-                if (path) alert(`导出成功：${path}`);
+                const { content, filename } = await api.exportGroupMarkdown(group.id);
+                // Use Tauri dialog to pick save location
+                const { save } = await import("@tauri-apps/plugin-dialog");
+                const path = await save({
+                  defaultPath: filename,
+                  filters: [{ name: "Markdown", extensions: ["md"] }]
+                });
+                if (!path) return;
+                // Write file via backend (simple invoke)
+                const { invoke } = await import("@tauri-apps/api/core");
+                await invoke("write_file", { path, content });
+                alert(`导出成功：${path}`);
               } catch (e: any) {
-                if (e !== '已取消') alert(e?.toString() || '导出失败');
+                alert(e?.toString() || '导出失败');
               }
             }}>
             <FileText size={12} />

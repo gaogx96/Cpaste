@@ -10,18 +10,8 @@ export const useSmartGroups = () => {
     setLoading(true);
     try {
       const list = await api.listSmartGroups();
-      // Fetch entry count for each group
-      const withCounts = await Promise.all(
-        list.map(async (g) => {
-          try {
-            const count = await api.getSmartGroupCount(g.id);
-            return { ...g, entry_count: count };
-          } catch {
-            return g;
-          }
-        })
-      );
-      setGroups(withCounts);
+      // Count is computed on the frontend from history, skip backend count call
+      setGroups(list);
     } catch (e) {
       console.error("Failed to load smart groups", e);
     } finally {

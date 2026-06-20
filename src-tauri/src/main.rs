@@ -134,6 +134,7 @@ fn main() {
             app::commands::get_smart_group_count,
             app::commands::reclassify_entries,
             app::commands::export_group_markdown,
+            app::commands::write_file,
             app::commands::create_smart_group_rule,
             app::commands::update_smart_group_rule,
             app::commands::delete_smart_group_rule,

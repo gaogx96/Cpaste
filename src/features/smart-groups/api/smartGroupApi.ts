@@ -126,9 +126,10 @@ export const reclassifyEntries = async (): Promise<number> => {
   return invoke("reclassify_entries");
 };
 
-/** Export a group's entries as Markdown file. Returns saved file path or empty if cancelled. */
-export const exportGroupMarkdown = async (groupId: number): Promise<string> => {
-  return invoke("export_group_markdown", { groupId });
+/** Export a group's entries as Markdown. Returns { content, filename }. */
+export const exportGroupMarkdown = async (groupId: number): Promise<{ content: string; filename: string }> => {
+  const raw: string = await invoke("export_group_markdown", { groupId });
+  return JSON.parse(raw);
 };
 
 export const getClipboardHistoryByGroup = async (
