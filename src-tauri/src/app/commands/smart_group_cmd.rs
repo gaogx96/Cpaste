@@ -7,7 +7,6 @@ use crate::app_state::SessionHistory;
 use crate::services::smart_group_classifier::{self, SmartGroupConfig};
 use std::io::Write;
 use tauri::{Emitter, Manager};
-use tauri_plugin_dialog::DialogExt;
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -125,14 +124,13 @@ pub fn get_smart_group_count(
     group_id: i64,
 ) -> AppResult<i64> {
     // 1. Reclassify (updates both DB and session entries)
-    let reclassified = reclassify_unclassified_with_session(&app, &db, group_id);
+    let _reclassified = reclassify_unclassified_with_session(&app, &db, group_id);
     // 2. Count session entries that match (this is what the frontend filter sees)
     let session = app.state::<SessionHistory>();
     let total_count = {
         let guard = session.0.lock().unwrap();
         guard.iter().filter(|e| e.smart_group_id == Some(group_id)).count() as i64
     };
-    println!("[GROUP_DEBUG] Final count: session={} (reclassified={})", total_count, reclassified);
     Ok(total_count)
 }
 
@@ -228,41 +226,21 @@ pub fn export_group_markdown(
 
     let mut md = String::new();
     md.push_str(&format!("# {}\n\n", group_name));
-    md.push_str(&format!("> 导出时间：{}\n\n", chrono::Local::now().format("%Y-%m-%d %H:%M:%S")));
-    md.push_str(&format!("> 条目数：{}\n\n---\n\n", entries.len()));
+    md.push_str(&format!("> {} 条内容\n\n---\n\n", entries.len()));
 
     for (i, entry) in entries.iter().enumerate() {
-        let ts = chrono::DateTime::from_timestamp_millis(entry.timestamp)
-            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
-            .unwrap_or_else(|| "unknown".to_string());
-
-        md.push_str(&format!("## {}  `{}`\n\n", i + 1, entry.content_type));
-        md.push_str(&format!("- **来源应用**: {}\n", entry.source_app));
-        md.push_str(&format!("- **时间**: {}\n", ts));
-        if !entry.note.is_empty() {
-            md.push_str(&format!("- **备注**: {}\n", entry.note));
-        }
-        if entry.group_confidence > 0.0 {
-            md.push_str(&format!("- **匹配置信度**: {:.0}%\n", entry.group_confidence * 100.0));
-        }
-        if !entry.group_reason.is_empty() {
-            md.push_str(&format!("- **匹配原因**: {}\n", entry.group_reason));
-        }
-        md.push_str("\n");
-
         if entry.content_type == "image" {
-            md.push_str(&format!("_图片: {}_\n\n", entry.content.chars().take(80).collect::<String>()));
-        } else if entry.content_type == "file" || entry.content_type == "video" {
-            md.push_str(&format!("```\n{}\n```\n\n", entry.content));
+            md.push_str(&format!("> 图片: {}...\n\n", entry.content.chars().take(80).collect::<String>()));
         } else {
             let text = entry.content.chars().take(2000).collect::<String>();
-            let lang = if entry.content_type == "code" { "" } else { "text" };
-            md.push_str(&format!("```{}\n{}\n```\n\n", lang, text));
+            md.push_str(&format!("{}\n\n", text));
             if entry.content.len() > 2000 {
                 md.push_str("> *内容已截断*\n\n");
             }
         }
-        md.push_str("---\n\n");
+        if i < entries.len() - 1 {
+            md.push_str("---\n\n");
+        }
     }
 
     let default_name = format!("{}_{}.md",
@@ -340,26 +318,22 @@ pub fn reclassify_unclassified_with_session(
     db: &State<'_, DbState>,
     target_group_id: i64,
 ) -> i64 {
-    println!("[GROUP_DEBUG] reclassify_unclassified called for group {}", target_group_id);
     let mut group = match db.smart_group_repo.get_group_by_id(target_group_id) {
         Ok(Some(g)) => {
-            println!("[GROUP_DEBUG] Loaded group: id={}, name={}, enabled={}, auto_match={}",
-                g.id, g.name, g.enabled, g.auto_match_enabled);
-            if !g.enabled { println!("[GROUP_DEBUG] Group disabled"); return 0; }
+            if !g.enabled { return 0; }
             g
         }
-        Ok(None) => { println!("[GROUP_DEBUG] Group not found"); return 0; }
-        Err(e) => { println!("[GROUP_DEBUG] Error: {}", e); return 0; }
+        Ok(None) => return 0,
+        Err(_) => return 0,
     };
 
     if !group.auto_match_enabled {
-        println!("[GROUP_DEBUG] Fixing auto_match_enabled=true");
         group.auto_match_enabled = true;
         let _ = db.smart_group_repo.update_group(&group);
     }
 
     let rules = match db.smart_group_repo.list_all_rules_for_groups(&[target_group_id]) {
-        Ok(r) => { for rule in &r { println!("[GROUP_DEBUG] Rule: {} / {}", rule.rule_type, rule.pattern); } r }
+        Ok(r) => r,
         Err(_) => return 0,
     };
     let examples = match db.smart_group_repo.list_all_examples_for_groups(&[target_group_id]) {
@@ -374,7 +348,6 @@ pub fn reclassify_unclassified_with_session(
     // 1. Process DB entries (persistent mode)
     let mut count = 0i64;
     if let Ok(entries) = db.smart_group_repo.get_unclassified_entries() {
-        println!("[GROUP_DEBUG] DB unclassified: {}", entries.len());
         for entry in &entries {
             let result = crate::services::smart_group_classifier::classify(
                 &entry.content, &entry.content_type, &config, None,
@@ -394,7 +367,6 @@ pub fn reclassify_unclassified_with_session(
         guard.iter().cloned().collect()
     };
 
-    println!("[GROUP_DEBUG] Session entries: {}", session_entries.len());
     let session_matched = session_entries.iter_mut().filter_map(|entry| {
         let result = crate::services::smart_group_classifier::classify(
             &entry.content, &entry.content_type, &config, None,
@@ -416,14 +388,12 @@ pub fn reclassify_unclassified_with_session(
                 if s_entry.smart_group_id.is_some() {
                     entry.smart_group_id = s_entry.smart_group_id;
                     entry.smart_group_name.clone_from(&s_entry.smart_group_name);
-                    // Notify frontend of the update
                     let _ = app.emit("clipboard-updated", s_entry.clone());
                 }
             }
         }
     }
 
-    println!("[GROUP_DEBUG] Matched DB={}, session={}", count, session_matched);
     count + session_matched as i64
 }
 
