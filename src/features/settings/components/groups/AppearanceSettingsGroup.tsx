@@ -88,7 +88,6 @@ const AppearanceSettingsGroup = ({
     surfaceOpacity,
     setSurfaceOpacity,
     saveAppSetting,
-    setSettingsSubpage
 }: AppearanceSettingsGroupProps) => {
     const showCustomBackgroundControls = supportsCustomBackground(theme);
     const showSurfaceOpacityControls = supportsSurfaceOpacity(theme);
@@ -121,16 +120,6 @@ const AppearanceSettingsGroup = ({
                                 </span>
                             </button>
                         ))}
-                        <button
-                            onClick={() => setSettingsSubpage("theme-store")}
-                            className="btn-icon theme-choice-btn"
-                            type="button"
-                            style={{ gridColumn: "span 3", fontSize: "11px", opacity: 0.85 }}
-                        >
-                            <span className="theme-choice-title">
-                                {t("theme_store") || "🎨 主题商店"}
-                            </span>
-                        </button>
                     </div>
                 </div>
 
