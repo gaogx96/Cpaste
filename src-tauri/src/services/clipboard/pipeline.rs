@@ -429,11 +429,6 @@ impl PipelineStage for ClassificationStage {
             None => return,
         };
 
-        // Skip classification if entry already has an ID (dedup existing, don't re-classify)
-        if entry.id != 0 {
-            return;
-        }
-
         // Only classify text-type content
         if !is_text_type(&entry.content_type) {
             return;

@@ -1641,7 +1641,7 @@ const ClipboardItem = ({
 
                 <div className="item-meta-right">
                     <div className="item-actions">
-                        {(item.tags?.includes('sensitive') || item.tags?.includes('密码') || item.tags?.includes('password')) && (
+                        {item.tags?.includes('加密') && (
                             <button
                                 className={`btn-icon ${isRevealed ? "active" : ""}`}
                                 onClick={onToggleReveal}

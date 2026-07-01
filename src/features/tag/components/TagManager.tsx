@@ -190,7 +190,7 @@ export default function TagManager({ t, theme }: TagManagerProps) {
         const trimmed = newTagName.trim();
         if (!trimmed || trimmed === oldName) { setEditingTag(null); return; }
 
-        if (oldName === 'sensitive' || oldName === '密码') {
+        if (oldName === '加密') {
             setEditingTag(null);
             return;
         }
@@ -206,7 +206,7 @@ export default function TagManager({ t, theme }: TagManagerProps) {
     };
 
     const handleDeleteTag = async (tagName: string) => {
-        if (tagName === 'sensitive' || tagName === '密码') return;
+        if (tagName === '加密') return;
         setIsDeleting(true);
         try {
             await invoke('delete_tag_from_all', { tagName });
@@ -389,7 +389,7 @@ export default function TagManager({ t, theme }: TagManagerProps) {
                                 <>
                                     <span className="tag-name">{tag.name}</span>
                                     <div className="tag-hover-actions">
-                                        {(tag.name !== 'sensitive' && tag.name !== '密码') && (
+                                        {(tag.name !== '加密') && (
                                             <span title="重命名" onClick={(e) => {
                                                 e.stopPropagation();
                                                 setEditingTag(tag.name);
@@ -402,7 +402,7 @@ export default function TagManager({ t, theme }: TagManagerProps) {
                                                 <Edit2 size={12} />
                                             </span>
                                         )}
-                                        {(tag.name !== 'sensitive' && tag.name !== '密码') && (
+                                        {(tag.name !== '加密') && (
                                             <span title="删除" onClick={(e) => {
                                                 e.stopPropagation();
                                                 e.preventDefault();

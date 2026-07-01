@@ -45,7 +45,7 @@ import type { ClipboardEntry } from "./shared/types";
 import type { QuickPasteHint, VirtualClipboardListHandle } from "./features/clipboard/types";
 
 /** Must match privacy blur checks in `useClipboardItemRenderer` / `ClipboardItem`. */
-const BUILTIN_SENSITIVE_TAG_NAMES = ["sensitive", "密码", "password"] as const;
+const BUILTIN_SENSITIVE_TAG_NAMES = ["加密"] as const;
 import type { QuickPasteModifier } from "./features/app/types";
 import { isMacPlatform } from "./shared/lib/platform";
 import { isTauriRuntime } from "./shared/lib/tauriRuntime";

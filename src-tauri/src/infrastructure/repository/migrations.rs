@@ -81,13 +81,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
             [],
         )?;
 
-        // Insert default tags
+        // Insert default tag
         let _ = conn.execute(
-            "INSERT OR IGNORE INTO saved_tags (name) VALUES ('sensitive')",
-            [],
-        );
-        let _ = conn.execute(
-            "INSERT OR IGNORE INTO saved_tags (name) VALUES ('密码')",
+            "INSERT OR IGNORE INTO saved_tags (name) VALUES ('加密')",
             [],
         );
 

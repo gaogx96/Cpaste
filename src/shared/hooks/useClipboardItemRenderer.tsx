@@ -80,9 +80,7 @@ export const useClipboardItemRenderer = ({
   const renderItemContent = useCallback(
     (item: ClipboardEntry, index: number, dragControls?: DragControls, disableLayout?: boolean) => {
       const isSensitiveHidden =
-        (item.tags?.includes("sensitive") ||
-          item.tags?.includes("密码") ||
-          item.tags?.includes("password")) &&
+        (item.tags?.includes("加密")) &&
         !revealedIds.has(item.id);
       const isEditingTags = editingTagsId === item.id;
 
