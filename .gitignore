@@ -10,6 +10,7 @@ dist/
 # Tauri / Rust build outputs
 src-tauri/target/
 target-codex-*/
+src-tauri/WebView2Loader.dll
 
 # Tauri signer keys (PRIVATE)
 signer.key
