@@ -1,5 +1,6 @@
 import { useState, type FC } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { Plus, Trash2, ChevronDown, ChevronRight, Tag, FileText } from "lucide-react";
 import { useSmartGroups, useGroupRules } from "../hooks/useSmartGroups";
 import * as api from "../api/smartGroupApi";
@@ -10,6 +11,11 @@ interface SmartGroupSettingsGroupProps {
   collapsed: boolean;
   onToggle: () => void;
 }
+
+// Tauri WebView2 focus workaround: re-focus window to ensure keyboard events reach the input
+const ensureFocus = () => {
+  try { getCurrentWindow().setFocus(); } catch {}
+};
 
 const SmartGroupSettingsGroup: FC<SmartGroupSettingsGroupProps> = ({ t: _t, collapsed, onToggle }) => {
   const { groups, loading, createGroup, updateGroup, deleteGroup } = useSmartGroups();
@@ -48,6 +54,9 @@ const SmartGroupSettingsGroup: FC<SmartGroupSettingsGroupProps> = ({ t: _t, coll
                   placeholder="输入分组名称"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
+                  onMouseDown={ensureFocus}
+                  onFocus={ensureFocus}
+                  onClick={ensureFocus}
                   autoFocus
                 />
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -113,11 +122,6 @@ const GroupCard: FC<{
   const [newRuleType, setNewRuleType] = useState("keyword");
   const [newRulePattern, setNewRulePattern] = useState("");
 
-  // Tauri WebView2 focus workaround: re-focus window to ensure keyboard events reach the input
-  const ensureFocus = () => {
-    try { getCurrentWindow().setFocus(); } catch {}
-  };
-
   return (
     <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0 }}>
       {/* Card header */}
@@ -182,7 +186,24 @@ const GroupCard: FC<{
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Tag size={14} />
               <span className="item-label" style={{ margin: 0, flex: 1 }}>匹配规则</span>
-              <button className="btn btn-xs btn-ghost" onClick={() => setShowAddRule(true)}>
+              <button className="btn btn-xs btn-ghost" onClick={async () => {
+                setShowAddRule(true);
+                // Auto-detect clipboard content and pre-fill the rule pattern
+                try {
+                  const clipText = await invoke<string>("read_clipboard_text");
+                  if (clipText?.trim()) {
+                    setNewRulePattern(clipText.trim());
+                  }
+                } catch (e) {
+                  // Fallback: try Web Clipboard API
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    if (text?.trim()) {
+                      setNewRulePattern(text.trim());
+                    }
+                  } catch { /* ignore */ }
+                }
+              }}>
                 <Plus size={12} /> 添加规则
               </button>
             </div>

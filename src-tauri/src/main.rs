@@ -116,6 +116,7 @@ fn main() {
             app::commands::register_hotkey,
             app::commands::test_hotkey_available,
             app::commands::toggle_clipboard_pin,
+            app::commands::read_clipboard_text,
             app::commands::update_tags,
             app::commands::add_manual_item,
             app::commands::update_item_content,

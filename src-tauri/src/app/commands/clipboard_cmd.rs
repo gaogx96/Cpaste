@@ -20,6 +20,17 @@ fn truncate_chars_with_suffix(text: &str, max_chars: usize, suffix: &str) -> Str
     out
 }
 
+/// Read the current clipboard text content from the system clipboard.
+/// Used by the frontend to pre-fill smart group rule patterns.
+#[tauri::command]
+pub fn read_clipboard_text() -> Result<String, String> {
+    let text = arboard::Clipboard::new()
+        .map_err(|e| format!("Failed to open clipboard: {}", e))?
+        .get_text()
+        .unwrap_or_default();
+    Ok(text)
+}
+
 #[tauri::command]
 pub fn toggle_clipboard_pin(
     app_handle: AppHandle,
