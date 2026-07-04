@@ -1,5 +1,5 @@
-import type { RefObject } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useState, type RefObject } from "react";
+import { AnimatePresence, motion, Reorder } from "framer-motion";
 import {
   ChevronLeft,
   Pin,
@@ -14,6 +14,11 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { getTagColor, getTagTextColor } from "../../../shared/lib/utils";
 import type { SmartGroup } from "../../../shared/types/smartGroup";
+
+/** Union type for all filter chips in the filter bar */
+type FilterChip =
+  | { kind: 'type'; typeKey: string }
+  | { kind: 'smartGroup'; group: SmartGroup };
 
 interface AppHeaderProps {
   t: (key: string) => string;
@@ -47,6 +52,7 @@ interface AppHeaderProps {
   groupFilter: number | null;
   setGroupFilter: (val: number | null) => void;
   smartGroups: SmartGroup[];
+  onSmartGroupReorder?: (newGroups: SmartGroup[]) => void;
   fetchHistory?: () => Promise<void>;
   onBack: () => void;
 }
@@ -83,6 +89,7 @@ const AppHeader = ({
   groupFilter,
   setGroupFilter,
   smartGroups,
+  onSmartGroupReorder,
   fetchHistory,
   onBack,
 }: AppHeaderProps) => {
@@ -98,6 +105,60 @@ const AppHeader = ({
       default: return t('type_text') || 'Text';
     }
   };
+
+  // ── Unified filter-chip drag-reorder ──
+  // Build initial chip list: type filters first, then enabled smart groups
+  const TYPE_KEYS = ['text', 'image', 'file', 'url', 'code', 'video', 'rich_text'];
+  const enabledGroups = smartGroups.filter(g => g.enabled);
+  const buildChips = () => [
+    ...TYPE_KEYS.map(tk => ({ kind: 'type' as const, typeKey: tk })),
+    ...enabledGroups.map(g => ({ kind: 'smartGroup' as const, group: g })),
+  ];
+
+  const [filterChips, setFilterChips] = useState<FilterChip[]>(() => buildChips());
+  // Sync when smartGroups change externally (settings page, etc.)
+  // Preserves existing chip positions; only updates smart group data references.
+  useEffect(() => {
+    setFilterChips(prev => {
+      const prevGroupIds = new Set(
+        prev.filter((c): c is Extract<FilterChip, { kind: 'smartGroup' }> => c.kind === 'smartGroup')
+          .map(c => c.group.id)
+      );
+      const curGroupIds = new Set(enabledGroups.map(g => g.id));
+      const groupSetChanged = prevGroupIds.size !== curGroupIds.size ||
+        [...prevGroupIds].some(id => !curGroupIds.has(id));
+
+      if (groupSetChanged) {
+        // Group added/removed → rebuild from scratch (type first, then groups)
+        return [
+          ...TYPE_KEYS.map(tk => ({ kind: 'type' as const, typeKey: tk })),
+          ...enabledGroups.map(g => ({ kind: 'smartGroup' as const, group: g })),
+        ];
+      }
+      // Only order changed → update references in-place, preserve chip positions
+      const groupMap = new Map(enabledGroups.map(g => [g.id, g]));
+      let changed = false;
+      const next = prev.map(chip => {
+        if (chip.kind === 'smartGroup' && groupMap.has(chip.group.id)) {
+          const updated = { kind: 'smartGroup' as const, group: groupMap.get(chip.group.id)! };
+          if (updated.group !== chip.group) changed = true;
+          return updated;
+        }
+        return chip;
+      });
+      return changed ? next : prev;
+    });
+  }, [enabledGroups]);
+
+  const handleFilterChipReorder = (reordered: FilterChip[]) => {
+    setFilterChips(reordered);
+    // Persist smart group order
+    const newEnabled = reordered
+      .filter((c): c is Extract<FilterChip, { kind: 'smartGroup' }> => c.kind === 'smartGroup')
+      .map(c => c.group);
+    onSmartGroupReorder?.(newEnabled);
+  };
+  // ───────────────────────────────────────
 
   return (
   <header className="window-drag-region">
@@ -253,47 +314,88 @@ const AppHeader = ({
                   }
                 }}
               >
-                {['text', 'image', 'file', 'url', 'code', 'video', 'rich_text'].map(t => (
-                  <button
-                    key={t}
-                    className={`btn-icon ${typeFilter === t ? 'active' : ''}`}
-                    onClick={() => { setTypeFilter(typeFilter === t ? null : t); setGroupFilter(null); }}
+                {filterChips.length > 0 && (
+                  <Reorder.Group
+                    axis="x"
+                    values={filterChips}
+                    onReorder={handleFilterChipReorder}
+                    as="div"
                     style={{
-                      width: 'auto',
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      borderRadius: '4px',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      opacity: typeFilter === t ? 1 : 0.7
+                      display: 'flex',
+                      gap: '6px',
+                      padding: 0,
+                      margin: 0,
                     }}
-                    title={getTypeName(t)}
+                    transition={{ type: 'spring', stiffness: 220, damping: 16 }}
                   >
-                    {getTypeName(t)}
-                  </button>
-                ))}
-                {smartGroups.filter(g => g.enabled).map(g => (
-                  <button
-                    key={`group-${g.id}`}
-                    className={`btn-icon ${groupFilter === g.id ? 'active' : ''}`}
-                    onClick={() => { setGroupFilter(groupFilter === g.id ? null : g.id); setTypeFilter(null); fetchHistory?.(); }}
-                    style={{
-                      width: 'auto',
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      borderRadius: '4px',
-                      whiteSpace: 'nowrap',
-                      flexShrink: 0,
-                      opacity: groupFilter === g.id ? 1 : 0.7,
-                      borderLeft: '1px solid var(--border-color)',
-                      marginLeft: smartGroups.filter(g => g.enabled)[0]?.id === g.id ? 6 : 0,
-                      paddingLeft: smartGroups.filter(g => g.enabled)[0]?.id === g.id ? 12 : 8,
-                    }}
-                    title={g.name}
-                  >
-                    {g.name}
-                  </button>
-                ))}
+                    {filterChips.map((chip, index) => {
+                      const isFirst = index === 0;
+                      if (chip.kind === 'type') {
+                        const isActive = typeFilter === chip.typeKey;
+                        return (
+                          <Reorder.Item
+                            key={chip.typeKey}
+                            value={chip}
+                            as="div"
+                            className={`btn-icon ${isActive ? 'active' : ''}`}
+                            whileDrag={{ scale: 1.06, boxShadow: '0 2px 10px rgba(0,0,0,0.18)' }}
+                            onClick={() => { setTypeFilter(isActive ? null : chip.typeKey); setGroupFilter(null); }}
+                            style={{
+                              width: 'auto',
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              borderRadius: '4px',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                              opacity: isActive ? 1 : 0.7,
+                              borderLeft: isFirst ? '1px solid var(--border-color)' : undefined,
+                              marginLeft: isFirst ? 6 : 0,
+                              paddingLeft: isFirst ? 12 : 8,
+                              cursor: 'grab',
+                              listStyle: 'none',
+                              userSelect: 'none',
+                            }}
+                            title={getTypeName(chip.typeKey)}
+                          >
+                            {getTypeName(chip.typeKey)}
+                          </Reorder.Item>
+                        );
+                      } else {
+                        // smartGroup chip
+                        const g = chip.group;
+                        const isActive = groupFilter === g.id;
+                        return (
+                          <Reorder.Item
+                            key={`group-${g.id}`}
+                            value={chip}
+                            as="div"
+                            className={`btn-icon ${isActive ? 'active' : ''}`}
+                            whileDrag={{ scale: 1.06, boxShadow: '0 2px 10px rgba(0,0,0,0.18)' }}
+                            onClick={() => { setGroupFilter(isActive ? null : g.id); setTypeFilter(null); fetchHistory?.(); }}
+                            style={{
+                              width: 'auto',
+                              padding: '4px 8px',
+                              fontSize: '11px',
+                              borderRadius: '4px',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                              opacity: isActive ? 1 : 0.7,
+                              borderLeft: isFirst ? '1px solid var(--border-color)' : undefined,
+                              marginLeft: isFirst ? 6 : 0,
+                              paddingLeft: isFirst ? 12 : 8,
+                              cursor: 'grab',
+                              listStyle: 'none',
+                              userSelect: 'none',
+                            }}
+                            title={g.name}
+                          >
+                            {g.name}
+                          </Reorder.Item>
+                        );
+                      }
+                    })}
+                  </Reorder.Group>
+                )}
               </div>
 
             </div>

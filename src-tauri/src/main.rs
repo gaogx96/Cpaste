@@ -129,6 +129,7 @@ fn main() {
             app::commands::save_file_copy,
             app::commands::create_smart_group,
             app::commands::update_smart_group,
+            app::commands::reorder_smart_groups,
             app::commands::delete_smart_group,
             app::commands::list_smart_groups,
             app::commands::get_smart_group_detail,

@@ -96,6 +96,18 @@ pub fn update_smart_group(
         .map_err(|e| crate::error::AppError::Internal(e))
 }
 
+/// Batch reorder smart groups by updating sort_order.
+/// `orders` is a list of (group_id, sort_order) pairs.
+#[tauri::command]
+pub fn reorder_smart_groups(
+    db: State<'_, DbState>,
+    orders: Vec<(i64, i64)>,
+) -> AppResult<()> {
+    db.smart_group_repo
+        .reorder_groups(&orders)
+        .map_err(|e| crate::error::AppError::Internal(e))
+}
+
 #[tauri::command]
 pub fn delete_smart_group(db: State<'_, DbState>, id: i64) -> AppResult<()> {
     db.smart_group_repo

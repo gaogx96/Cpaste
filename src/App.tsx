@@ -9,6 +9,7 @@ import AppHeader from "./features/app/components/AppHeader";
 import AppMainContent from "./features/app/components/AppMainContent";
 import { useAppState } from "./features/app/hooks/useAppState";
 import type { SmartGroup } from "./shared/types/smartGroup";
+import { reorderSmartGroups } from "./features/smart-groups/api/smartGroupApi";
 import { useSettingsPanelProps } from "./features/settings/hooks/useSettingsPanelProps";
 import { useDebounce } from "./shared/hooks/useDebounce";
 import { useHistoryFetch } from "./shared/hooks/useHistoryFetch";
@@ -288,6 +289,19 @@ const App = () => {
     }
     prevShowSettings.current = showSettings;
   }, [showSettings, refreshSmartGroups]);
+
+  const handleSmartGroupReorder = useCallback((reorderedEnabled: SmartGroup[]) => {
+    const enabledIds = new Set(reorderedEnabled.map(g => g.id));
+    let merged: SmartGroup[] = [];
+    setSmartGroups(prev => {
+      const disabled = prev.filter(g => !enabledIds.has(g.id));
+      merged = [...reorderedEnabled, ...disabled];
+      return merged;
+    });
+    // Persist to backend (functional updater runs synchronously, so merged is populated)
+    const orders: [number, number][] = merged.map((g, i) => [g.id, i]);
+    reorderSmartGroups(orders).catch(console.error);
+  }, []);
   const PAGE_SIZE = 80;
   const { fetchHistory, loadMoreHistory } = useHistoryFetch({
     debouncedSearch,
@@ -842,6 +856,7 @@ const App = () => {
         setGroupFilter={setGroupFilter}
         smartGroups={smartGroups}
         fetchHistory={fetchHistory}
+        onSmartGroupReorder={handleSmartGroupReorder}
         onBack={handleHeaderBack}
       />
 

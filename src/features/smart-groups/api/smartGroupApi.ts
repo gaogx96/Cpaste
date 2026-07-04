@@ -58,6 +58,11 @@ export const listSmartGroups = async (): Promise<SmartGroup[]> => {
   return invoke("list_smart_groups");
 };
 
+/** Batch reorder groups. `orders` is an array of [groupId, sortOrder] tuples. */
+export const reorderSmartGroups = async (orders: [number, number][]): Promise<void> => {
+  return invoke("reorder_smart_groups", { orders });
+};
+
 export const getSmartGroupDetail = async (id: number): Promise<SmartGroup | null> => {
   return invoke("get_smart_group_detail", { id });
 };

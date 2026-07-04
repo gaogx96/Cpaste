@@ -69,6 +69,25 @@ impl SmartGroupRepository {
         Ok(())
     }
 
+    pub fn reorder_groups(&self, orders: &[(i64, i64)]) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let now = now_ms();
+        conn.execute("BEGIN TRANSACTION", [])
+            .map_err(|e| e.to_string())?;
+        for (group_id, sort_order) in orders {
+            conn.execute(
+                "UPDATE smart_groups SET sort_order = ?1, updated_at = ?2 WHERE id = ?3",
+                params![sort_order, now, group_id],
+            )
+            .map_err(|e| {
+                let _ = conn.execute("ROLLBACK", []);
+                e.to_string()
+            })?;
+        }
+        conn.execute("COMMIT", []).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub fn delete_group(&self, group_id: i64) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         // Move clipboard entries out of this group first
