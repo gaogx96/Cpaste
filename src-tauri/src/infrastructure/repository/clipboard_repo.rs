@@ -330,19 +330,25 @@ impl SqliteClipboardRepository {
         if entry.id > 0 {
             // Update existing entry (Move to top logic)
             conn.execute(
-                "UPDATE clipboard_history SET 
-                    content_type = ?1, 
-                    content = ?2, 
-                    html_content = ?3, 
-                    source_app = ?4, 
-                    timestamp = ?5, 
-                    preview = ?6, 
-                    content_hash = ?7, 
-                    tags = ?8, 
+                "UPDATE clipboard_history SET
+                    content_type = ?1,
+                    content = ?2,
+                    html_content = ?3,
+                    source_app = ?4,
+                    timestamp = ?5,
+                    preview = ?6,
+                    content_hash = ?7,
+                    tags = ?8,
                     is_external = ?9,
                     source_app_path = ?10,
-                    use_count = use_count + 1
-                 WHERE id = ?11",
+                    use_count = use_count + 1,
+                    smart_group_id = ?11,
+                    smart_group_name = ?12,
+                    group_confidence = ?13,
+                    group_reason = ?14,
+                    group_match_type = ?15,
+                    group_manual_override = ?16
+                 WHERE id = ?17",
                 params![
                     entry.content_type,
                     content,
@@ -354,6 +360,12 @@ impl SqliteClipboardRepository {
                     serde_json::to_string(&cleaned_tags).unwrap_or_else(|_| "[]".to_string()),
                     if final_is_external { 1 } else { 0 },
                     entry.source_app_path.as_deref(),
+                    entry.smart_group_id,
+                    entry.smart_group_name,
+                    entry.group_confidence,
+                    entry.group_reason,
+                    entry.group_match_type,
+                    if entry.group_manual_override { 1 } else { 0 },
                     entry.id
                 ],
             )
@@ -363,8 +375,8 @@ impl SqliteClipboardRepository {
         } else {
             // Insert new entry
             conn.execute(
-                "INSERT INTO clipboard_history (content_type, content, html_content, source_app, timestamp, preview, is_pinned, content_hash, tags, is_external, pinned_order, source_app_path) 
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                "INSERT INTO clipboard_history (content_type, content, html_content, source_app, timestamp, preview, is_pinned, content_hash, tags, is_external, pinned_order, source_app_path, smart_group_id, smart_group_name, group_confidence, group_reason, group_match_type, group_manual_override)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 params![
                     entry.content_type,
                     content,
@@ -377,7 +389,13 @@ impl SqliteClipboardRepository {
                     serde_json::to_string(&cleaned_tags).unwrap_or_else(|_| "[]".to_string()),
                     if final_is_external { 1 } else { 0 },
                     entry.pinned_order,
-                    entry.source_app_path.as_deref()
+                    entry.source_app_path.as_deref(),
+                    entry.smart_group_id,
+                    entry.smart_group_name,
+                    entry.group_confidence,
+                    entry.group_reason,
+                    entry.group_match_type,
+                    if entry.group_manual_override { 1 } else { 0 }
                 ],
             ).map_err(|e| e.to_string())?;
 
