@@ -237,10 +237,11 @@ impl TagRepository for SqliteTagRepository {
     fn get_entries_by_tag(&self, tag: &str) -> Result<Vec<ClipboardEntry>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let mut stmt = conn.prepare(
-            "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path 
+            "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path,
+                        ch.smart_group_id, ch.smart_group_name, ch.note, ch.group_confidence, ch.group_reason, ch.group_match_type, ch.group_manual_override
              FROM clipboard_history ch
              INNER JOIN entry_tags et ON ch.id = et.entry_id
-             WHERE et.tag = ? 
+             WHERE et.tag = ?
              ORDER BY ch.is_pinned DESC, ch.pinned_order DESC, ch.timestamp DESC",
         ).map_err(|e| e.to_string())?;
 
@@ -270,7 +271,13 @@ impl TagRepository for SqliteTagRepository {
                     pinned_order: row.get(11).unwrap_or(0),
                     source_app_path: row.get(12).unwrap_or(None),
                     file_preview_exists: true, // simplified
-                    ..Default::default()
+                    smart_group_id: row.get(13).ok().flatten(),
+                    smart_group_name: row.get(14).unwrap_or_default(),
+                    note: row.get(15).unwrap_or_default(),
+                    group_confidence: row.get(16).unwrap_or(0.0),
+                    group_reason: row.get(17).unwrap_or_default(),
+                    group_match_type: row.get(18).unwrap_or_default(),
+                    group_manual_override: row.get::<_, i32>(19).unwrap_or(0) != 0,
                 })
             })
             .map_err(|e| e.to_string())?;

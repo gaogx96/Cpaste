@@ -630,9 +630,10 @@ impl SqliteClipboardRepository {
         id: i64,
     ) -> Result<Option<ClipboardEntry>, String> {
         let mut stmt = conn.prepare(
-            "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path 
-             FROM clipboard_history 
-             WHERE id = ? 
+            "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
+                    smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
+             FROM clipboard_history
+             WHERE id = ?
              LIMIT 1",
         ).map_err(|e| e.to_string())?;
         let mut rows = stmt.query(params![id]).map_err(|e| e.to_string())?;
@@ -662,7 +663,13 @@ impl SqliteClipboardRepository {
                 pinned_order: row.get(11).unwrap_or(0),
                 source_app_path: row.get(12).unwrap_or(None),
                 file_preview_exists: true,
-                ..Default::default()
+                smart_group_id: row.get(13).ok().flatten(),
+                smart_group_name: row.get(14).unwrap_or_default(),
+                note: row.get(15).unwrap_or_default(),
+                group_confidence: row.get(16).unwrap_or(0.0),
+                group_reason: row.get(17).unwrap_or_default(),
+                group_match_type: row.get(18).unwrap_or_default(),
+                group_manual_override: row.get::<_, i32>(19).unwrap_or(0) != 0,
             }))
         } else {
             Ok(None)
@@ -982,7 +989,13 @@ impl ClipboardRepository for SqliteClipboardRepository {
                     // Avoid synchronous filesystem existence checks in history query.
                     // Missing files are still handled by frontend image/file preview error fallback.
                     file_preview_exists: true,
-                ..Default::default()
+                    smart_group_id: row.get(13).ok().flatten(),
+                    smart_group_name: row.get(14).unwrap_or_default(),
+                    note: row.get(15).unwrap_or_default(),
+                    group_confidence: row.get(16).unwrap_or(0.0),
+                    group_reason: row.get(17).unwrap_or_default(),
+                    group_match_type: row.get(18).unwrap_or_default(),
+                    group_manual_override: row.get::<_, i32>(19).unwrap_or(0) != 0,
                 },
                 content_raw,
                 preview_raw,
@@ -993,10 +1006,11 @@ impl ClipboardRepository for SqliteClipboardRepository {
         let mut mapped_rows = Vec::new();
         if let Some(ct) = content_type {
             let mut stmt = conn.prepare(
-                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path 
-                 FROM clipboard_history 
-                 WHERE content_type = ? 
-                 ORDER BY is_pinned DESC, pinned_order DESC, timestamp DESC, id DESC 
+                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
+                        smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
+                 FROM clipboard_history
+                 WHERE content_type = ?
+                 ORDER BY is_pinned DESC, pinned_order DESC, timestamp DESC, id DESC
                  LIMIT ? OFFSET ?",
             ).map_err(|e| e.to_string())?;
             let rows = stmt
@@ -1007,9 +1021,10 @@ impl ClipboardRepository for SqliteClipboardRepository {
             }
         } else {
             let mut stmt = conn.prepare(
-                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path 
-                 FROM clipboard_history 
-                 ORDER BY is_pinned DESC, pinned_order DESC, timestamp DESC, id DESC 
+                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
+                        smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
+                 FROM clipboard_history
+                 ORDER BY is_pinned DESC, pinned_order DESC, timestamp DESC, id DESC
                  LIMIT ? OFFSET ?",
             ).map_err(|e| e.to_string())?;
             let rows = stmt
@@ -1063,14 +1078,16 @@ impl ClipboardRepository for SqliteClipboardRepository {
         {
             // Portable version: Data is NOT encrypted, use conventional SQL LIKE search (fastest)
             let sql = if tag_only {
-                "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path
+                "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path,
+                        ch.smart_group_id, ch.smart_group_name, ch.note, ch.group_confidence, ch.group_reason, ch.group_match_type, ch.group_manual_override
                  FROM clipboard_history ch
                  INNER JOIN entry_tags et ON ch.id = et.entry_id
                  WHERE et.tag LIKE '%' || ?1 || '%'
                  ORDER BY ch.timestamp DESC
                  LIMIT ?2"
             } else {
-                "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path
+                "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path,
+                        ch.smart_group_id, ch.smart_group_name, ch.note, ch.group_confidence, ch.group_reason, ch.group_match_type, ch.group_manual_override
                  FROM clipboard_history ch
                  LEFT JOIN entry_tags et ON ch.id = et.entry_id
                  WHERE ch.content LIKE '%' || ?1 || '%'
@@ -1103,7 +1120,13 @@ impl ClipboardRepository for SqliteClipboardRepository {
                         pinned_order: row.get(11).unwrap_or(0),
                         source_app_path: row.get(12).unwrap_or(None),
                         file_preview_exists: true,
-                ..Default::default() // Simplified for search
+                        smart_group_id: row.get(13).ok().flatten(),
+                        smart_group_name: row.get(14).unwrap_or_default(),
+                        note: row.get(15).unwrap_or_default(),
+                        group_confidence: row.get(16).unwrap_or(0.0),
+                        group_reason: row.get(17).unwrap_or_default(),
+                        group_match_type: row.get(18).unwrap_or_default(),
+                        group_manual_override: row.get::<_, i32>(19).unwrap_or(0) != 0,
                     })
                 })
                 .map_err(|e| e.to_string())?;
@@ -1132,7 +1155,8 @@ impl ClipboardRepository for SqliteClipboardRepository {
             // 1) SQL search for non-sensitive (plaintext) entries
             let sql_non_sensitive = if tag_only {
                 format!(
-                    "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path
+                    "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path,
+                            ch.smart_group_id, ch.smart_group_name, ch.note, ch.group_confidence, ch.group_reason, ch.group_match_type, ch.group_manual_override
                      FROM clipboard_history ch
                      INNER JOIN entry_tags et ON ch.id = et.entry_id
                      WHERE NOT EXISTS (
@@ -1147,7 +1171,8 @@ impl ClipboardRepository for SqliteClipboardRepository {
                 )
             } else {
                 format!(
-                    "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path
+                    "SELECT DISTINCT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path,
+                            ch.smart_group_id, ch.smart_group_name, ch.note, ch.group_confidence, ch.group_reason, ch.group_match_type, ch.group_manual_override
                      FROM clipboard_history ch
                      LEFT JOIN entry_tags et ON ch.id = et.entry_id
                      WHERE NOT EXISTS (
@@ -1159,7 +1184,7 @@ impl ClipboardRepository for SqliteClipboardRepository {
                          ch.content LIKE '%' || ?1 || '%'
                          OR ch.source_app LIKE '%' || ?1 || '%'
                          OR et.tag LIKE '%' || ?1 || '%'
-                         OR ch.note LIKE '%' || ?1 || '%'
+                         OR ch.note LIKE '%' || ?1 || '%
                          OR ch.smart_group_name LIKE '%' || ?1 || '%'
                        )
                      ORDER BY ch.timestamp DESC, ch.id DESC
@@ -1197,7 +1222,13 @@ impl ClipboardRepository for SqliteClipboardRepository {
                         pinned_order: row.get(11).unwrap_or(0),
                         source_app_path: row.get(12).unwrap_or(None),
                         file_preview_exists: true,
-                ..Default::default()
+                        smart_group_id: row.get(13).ok().flatten(),
+                        smart_group_name: row.get(14).unwrap_or_default(),
+                        note: row.get(15).unwrap_or_default(),
+                        group_confidence: row.get(16).unwrap_or(0.0),
+                        group_reason: row.get(17).unwrap_or_default(),
+                        group_match_type: row.get(18).unwrap_or_default(),
+                        group_manual_override: row.get::<_, i32>(19).unwrap_or(0) != 0,
                     })
                 })
                 .map_err(|e| e.to_string())?;
@@ -1217,12 +1248,13 @@ impl ClipboardRepository for SqliteClipboardRepository {
                 let batch_size = 500;
                 let enc_like = format!("{}%", ENCRYPT_PREFIX);
                 let sql_sensitive = format!(
-                    "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path 
+                    "SELECT ch.id, ch.content_type, ch.content, ch.html_content, ch.source_app, ch.timestamp, ch.preview, ch.is_pinned, ch.tags, ch.use_count, ch.is_external, ch.pinned_order, ch.source_app_path,
+                            ch.smart_group_id, ch.smart_group_name, ch.note, ch.group_confidence, ch.group_reason, ch.group_match_type, ch.group_manual_override
                      FROM clipboard_history ch
                      WHERE (
                          EXISTS (
-                             SELECT 1 FROM entry_tags se 
-                             WHERE se.entry_id = ch.id 
+                             SELECT 1 FROM entry_tags se
+                             WHERE se.entry_id = ch.id
                                AND se.tag COLLATE NOCASE IN {}
                          )
                          OR ch.content LIKE ?1
@@ -1257,7 +1289,13 @@ impl ClipboardRepository for SqliteClipboardRepository {
                                 pinned_order: row.get(11).unwrap_or(0),
                                 source_app_path: row.get(12).unwrap_or(None),
                                 file_preview_exists: true,
-                ..Default::default()
+                                smart_group_id: row.get(13).ok().flatten(),
+                                smart_group_name: row.get(14).unwrap_or_default(),
+                                note: row.get(15).unwrap_or_default(),
+                                group_confidence: row.get(16).unwrap_or(0.0),
+                                group_reason: row.get(17).unwrap_or_default(),
+                                group_match_type: row.get(18).unwrap_or_default(),
+                                group_manual_override: row.get::<_, i32>(19).unwrap_or(0) != 0,
                             })
                         })
                         .map_err(|e| e.to_string())?;
