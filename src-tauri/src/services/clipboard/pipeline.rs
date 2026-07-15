@@ -319,11 +319,14 @@ impl PipelineStage for ValidationStage {
                 false
             };
 
-            // For rich text, we want to deduplicate against all text types
-            let types_to_check = if content_type == "rich_text" {
-                vec!["rich_text", "text", "code", "url"]
-            } else {
-                vec![content_type.as_str()]
+            // For all text types, deduplicate against all text types to handle
+            // content_type detection differences between copies (e.g., same text
+            // detected as "url" in one copy and "text" in another).
+            let types_to_check = match content_type.as_str() {
+                "rich_text" | "text" | "code" | "url" => {
+                    vec!["rich_text", "text", "code", "url"]
+                }
+                _ => vec![content_type.as_str()],
             };
 
             for t in types_to_check {
