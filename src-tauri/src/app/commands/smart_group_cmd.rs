@@ -6,7 +6,7 @@ use crate::error::AppResult;
 use crate::app_state::SessionHistory;
 use crate::services::smart_group_classifier::{self, SmartGroupConfig};
 use std::io::Write;
-use tauri::{Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -269,7 +269,10 @@ pub fn export_group_markdown(
 /// Re-run classification on existing entries and update their smart_group_id.
 /// Called after rules/examples change so existing items get matched too.
 #[tauri::command]
-pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
+pub fn reclassify_entries(
+    app_handle: AppHandle,
+    db: State<'_, DbState>,
+) -> AppResult<i64> {
     // 1. Load groups, rules, examples
     let groups = db.smart_group_repo
         .get_enabled_auto_match_groups()
@@ -312,13 +315,23 @@ pub fn reclassify_entries(db: State<'_, DbState>) -> AppResult<i64> {
 
         if let Some(group_id) = result.smart_group_id {
             if db.smart_group_repo
-                .assign_entry_to_group(entry.id, group_id, &result.smart_group_name)
+                .set_entry_classification(
+                    entry.id,
+                    Some(group_id),
+                    &result.smart_group_name,
+                    result.confidence,
+                    &result.reason,
+                    &result.match_type,
+                )
                 .is_ok()
             {
                 updated_count += 1;
             }
         }
     }
+
+    // Notify frontend to refresh history so entries show updated smart_group_id
+    let _ = app_handle.emit("clipboard-changed", ());
 
     Ok(updated_count)
 }
@@ -365,8 +378,9 @@ pub fn reclassify_unclassified_with_session(
                 &entry.content, &entry.content_type, &config, None,
             );
             if result.smart_group_id == Some(target_group_id) {
-                let _ = db.smart_group_repo.assign_entry_to_group(
-                    entry.id, target_group_id, &result.smart_group_name);
+                let _ = db.smart_group_repo.set_entry_classification(
+                    entry.id, Some(target_group_id), &result.smart_group_name,
+                    result.confidence, &result.reason, &result.match_type);
                 count += 1;
             }
         }
