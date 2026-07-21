@@ -579,6 +579,25 @@ impl SmartGroupRepository {
         repo.get_unclassified_entries_with_conn(&conn)
     }
 
+    /// Clear smart_group_id for all entries that are NOT manually assigned,
+    /// so they will be re-evaluated by the next reclassification.
+    pub fn reset_auto_classifications(&self) -> Result<usize, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let count = conn.execute(
+            "UPDATE clipboard_history SET
+                smart_group_id = NULL,
+                smart_group_name = '',
+                group_confidence = 0.0,
+                group_reason = '',
+                group_match_type = ''
+             WHERE (group_manual_override IS NULL OR group_manual_override = 0)
+               AND smart_group_id IS NOT NULL",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(count)
+    }
+
     pub fn set_entry_classification(
         &self,
         entry_id: i64,

@@ -294,7 +294,11 @@ pub fn reclassify_entries(
 
     let config = SmartGroupConfig::build(groups, rules, examples);
 
-    // 2. Load all text-type entries that don't have smart_group_id set yet
+    // 2. Reset auto-classifications so all entries (except manually assigned)
+    //    are re-evaluated with the new rules.
+    let _ = db.smart_group_repo.reset_auto_classifications();
+
+    // 3. Load all text-type entries that don't have smart_group_id set yet
     let entries = db.smart_group_repo
         .get_unclassified_entries()
         .map_err(|e| crate::error::AppError::Internal(e))?;

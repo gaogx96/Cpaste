@@ -1,6 +1,6 @@
 [package]
 name = "cpaste-app"
-version = "1.2.6"
+version = "1.2.7"
 description = "A lightweight clipboard manager"
 authors = ["you"]
 edition = "2021"
