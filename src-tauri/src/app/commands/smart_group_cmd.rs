@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::database::DbState;
+use crate::database::{is_text_type, DbState};
 use crate::domain::models::SmartGroup;
 use crate::error::AppResult;
 use crate::app_state::SessionHistory;
@@ -294,42 +294,55 @@ pub fn reclassify_entries(
 
     let config = SmartGroupConfig::build(groups, rules, examples);
 
-    // 2. Reset auto-classifications so all entries (except manually assigned)
+    // 2. Reset auto-classifications so all DB entries (except manually assigned)
     //    are re-evaluated with the new rules.
     let _ = db.smart_group_repo.reset_auto_classifications();
 
-    // 3. Load all text-type entries that don't have smart_group_id set yet
-    let entries = db.smart_group_repo
-        .get_unclassified_entries()
-        .map_err(|e| crate::error::AppError::Internal(e))?;
+    // 3. Classify all unclassified DB entries
+    if let Ok(entries) = db.smart_group_repo.get_unclassified_entries() {
+        for entry in &entries {
+            let result = smart_group_classifier::classify(
+                &entry.content,
+                &entry.content_type,
+                &config,
+                None,
+            );
 
-    if entries.is_empty() {
-        return Ok(0);
+            if let Some(group_id) = result.smart_group_id {
+                let _ = db.smart_group_repo
+                    .set_entry_classification(
+                        entry.id,
+                        Some(group_id),
+                        &result.smart_group_name,
+                        result.confidence,
+                        &result.reason,
+                        &result.match_type,
+                    );
+            }
+        }
     }
 
-    let mut updated_count = 0i64;
-
-    for entry in &entries {
-        let result = smart_group_classifier::classify(
-            &entry.content,
-            &entry.content_type,
-            &config,
-            None,
-        );
-
-        if let Some(group_id) = result.smart_group_id {
-            if db.smart_group_repo
-                .set_entry_classification(
-                    entry.id,
-                    Some(group_id),
-                    &result.smart_group_name,
-                    result.confidence,
-                    &result.reason,
-                    &result.match_type,
-                )
-                .is_ok()
-            {
-                updated_count += 1;
+    // 4. Also process session entries (non-persistent mode)
+    let session = app_handle.state::<SessionHistory>();
+    {
+        let mut guard = session.0.lock().unwrap();
+        for entry in guard.iter_mut() {
+            if !is_text_type(&entry.content_type) || entry.group_manual_override {
+                continue;
+            }
+            let result = smart_group_classifier::classify(
+                &entry.content,
+                &entry.content_type,
+                &config,
+                None,
+            );
+            if let Some(group_id) = result.smart_group_id {
+                entry.smart_group_id = Some(group_id);
+                entry.smart_group_name = result.smart_group_name.clone();
+                entry.group_confidence = result.confidence;
+                entry.group_reason = result.reason;
+                entry.group_match_type = result.match_type;
+                let _ = app_handle.emit("clipboard-updated", entry.clone());
             }
         }
     }
@@ -337,7 +350,7 @@ pub fn reclassify_entries(
     // Notify frontend to refresh history so entries show updated smart_group_id
     let _ = app_handle.emit("clipboard-changed", ());
 
-    Ok(updated_count)
+    Ok(0)
 }
 
 /// Simple reclassification: match DB entries + session entries against a group.
