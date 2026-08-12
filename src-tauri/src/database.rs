@@ -192,7 +192,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         [],
     );
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.persistent', 'false')",
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.persistent', 'true')",
         [],
     );
     let _ = conn.execute(
@@ -315,7 +315,7 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
         [],
     );
     let _ = conn.execute(
-        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.persistent_limit', '500')",
+        "INSERT OR IGNORE INTO settings (key, value) VALUES ('app.persistent_limit', '2000')",
         [],
     );
 
