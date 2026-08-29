@@ -748,6 +748,19 @@ const App = () => {
 
   useSearchFetchTrigger({ debouncedSearch, isComposing, typeFilter, fetchHistory });
 
+  // When the dataset is replaced wholesale (tab/smart-group switch, or search term
+  // change — exactly the cases useSearchFetchTrigger refetches with reset=true), the
+  // virtualized list must return to the top. Otherwise Virtuoso keeps the previous
+  // tab's scroll offset and renders stale/wrong content until the user scrolls.
+  const previousFilterKey = useRef<string>("");
+  useEffect(() => {
+    const filterKey = `${typeFilter ?? ""}|${groupFilter ?? ""}|${debouncedSearch}`;
+    if (previousFilterKey.current !== filterKey) {
+      previousFilterKey.current = filterKey;
+      virtualListRef.current?.scrollToTop();
+    }
+  }, [typeFilter, groupFilter, debouncedSearch]);
+
   useScrollToSelection({
     filteredHistory,
     selectedIndex,
