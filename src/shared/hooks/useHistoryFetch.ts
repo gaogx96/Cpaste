@@ -39,6 +39,10 @@ export const useHistoryFetch = ({
   const lastRequestedOffsetRef = useRef<number | null>(null);
   const currentOffsetRef = useRef(currentOffset);
   const historyLengthRef = useRef(historyLength);
+  // 正在执行中的 reset（切换标签/搜索）数量，用于阻止 reset 期间触发 loadMore
+  const resettingCountRef = useRef(0);
+  // 最近一次 reset 的 seq，晚于它的 loadMore 结果才有效（丢弃切换标签前遗留的加载）
+  const resetSeqRef = useRef(0);
 
   useEffect(() => {
     currentOffsetRef.current = currentOffset;
@@ -50,11 +54,15 @@ export const useHistoryFetch = ({
   const fetchHistory = useCallback(
     async (reset = false) => {
       const seq = ++fetchSeqRef.current;
+      if (reset) {
+        resettingCountRef.current++;
+        resetSeqRef.current = seq;
+        lastRequestedOffsetRef.current = null;
+        // 立即清零 offset refs，避免 reset 完成前 loadMore 用旧标签的 offset
+        currentOffsetRef.current = 0;
+        historyLengthRef.current = 0;
+      }
       try {
-        if (reset) {
-          lastRequestedOffsetRef.current = null;
-        }
-
         const baseOffset = reset
           ? 0
           : Math.min(currentOffsetRef.current, historyLengthRef.current);
@@ -87,6 +95,8 @@ export const useHistoryFetch = ({
           setHistory(data);
           setCurrentOffset(data.length);
           setHasMore(false);
+          currentOffsetRef.current = data.length;
+          historyLengthRef.current = data.length;
         } else {
           const requestedLimit = pageSize + 1; // Use standard page size for DB limit
           const rawData = await invoke<ClipboardEntry[]>("get_clipboard_history", {
@@ -108,7 +118,11 @@ export const useHistoryFetch = ({
             setHistory(data);
             setCurrentOffset(dbItemsCount);
             setHasMore(hasMoreNow);
+            currentOffsetRef.current = dbItemsCount;
+            historyLengthRef.current = data.length;
           } else {
+            // 丢弃切换标签（reset）之前发起的 loadMore 结果，防止旧标签数据污染新标签列表
+            if (seq <= resetSeqRef.current) return;
             let nextItems: ClipboardEntry[] = [];
             setHistory((prev) => {
               const existingIds = new Set(prev.map((item) => item.id));
@@ -123,11 +137,17 @@ export const useHistoryFetch = ({
             // it means the items we got were already in our list (maybe shifted due to sorting).
             // We should keep hasMore true so the user can try to load further.
             setHasMore(hasMoreNow);
+            currentOffsetRef.current = currentOffsetRef.current + dbItemsCount;
+            historyLengthRef.current = historyLengthRef.current + dbItemsCount;
           }
         }
       } catch (err) {
         console.error("无法获取历史记录", err);
         setHasMore(false);
+      } finally {
+        if (reset) {
+          resettingCountRef.current--;
+        }
       }
     },
     [
@@ -144,6 +164,8 @@ export const useHistoryFetch = ({
 
   const loadMoreHistory = useCallback(async () => {
     if (loadingRef.current || isLoadingMore || !hasMore) return;
+    // 切换标签/搜索（reset）进行中时，跳过 loadMore，避免用旧 offset 请求污染新列表
+    if (resettingCountRef.current > 0) return;
     if (debouncedSearch && debouncedSearch.trim().length > 0) return;
 
     const effectiveOffset = Math.min(currentOffsetRef.current, historyLengthRef.current);
