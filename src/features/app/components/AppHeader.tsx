@@ -53,7 +53,6 @@ interface AppHeaderProps {
   setGroupFilter: (val: number | null) => void;
   smartGroups: SmartGroup[];
   onSmartGroupReorder?: (newGroups: SmartGroup[]) => void;
-  fetchHistory?: () => Promise<void>;
   onBack: () => void;
 }
 
@@ -90,7 +89,6 @@ const AppHeader = ({
   setGroupFilter,
   smartGroups,
   onSmartGroupReorder,
-  fetchHistory,
   onBack,
 }: AppHeaderProps) => {
   const getTypeName = (type: string) => {
@@ -371,7 +369,7 @@ const AppHeader = ({
                             as="div"
                             className={`btn-icon ${isActive ? 'active' : ''}`}
                             whileDrag={{ scale: 1.06, boxShadow: '0 2px 10px rgba(0,0,0,0.18)' }}
-                            onClick={() => { setGroupFilter(isActive ? null : g.id); setTypeFilter(null); fetchHistory?.(); }}
+                            onClick={() => { setGroupFilter(isActive ? null : g.id); setTypeFilter(null); }}
                             style={{
                               width: 'auto',
                               padding: '4px 8px',

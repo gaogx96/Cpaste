@@ -251,6 +251,22 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO schema_migrations (version) VALUES (10)", [])?;
     }
 
+    // Migration 11: Index for smart_group_id-filtered + ordered history queries
+    if current_version < 11 {
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_clipboard_history_smart_group_order
+             ON clipboard_history (
+                smart_group_id,
+                is_pinned DESC,
+                pinned_order DESC,
+                timestamp DESC,
+                id DESC
+             )",
+            [],
+        )?;
+        conn.execute("INSERT INTO schema_migrations (version) VALUES (11)", [])?;
+    }
+
     Ok(())
 }
 

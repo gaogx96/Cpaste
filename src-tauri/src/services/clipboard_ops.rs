@@ -372,9 +372,10 @@ pub async fn paste_history_item_by_index(
         (index + 1) as i32,
         0,
         None,
+        None,
     )?;
 
-    let Some(item) = history.get(index).cloned() else {
+    let Some(item) = history.items.get(index).cloned() else {
         return Ok(false);
     };
 
@@ -1378,10 +1379,11 @@ pub fn paste_latest_rich(app_handle: tauri::AppHandle) {
             1,
             0, // offset
             None,
+            None,
         );
 
-        if let Ok(items) = history {
-            if let Some(item) = items.first() {
+        if let Ok(page) = history {
+            if let Some(item) = page.items.first() {
                 let _ = copy_to_clipboard(
                     app_handle_clone.clone(),
                     app_handle_clone.state::<DbState>(),

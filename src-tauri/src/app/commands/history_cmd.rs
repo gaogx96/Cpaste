@@ -7,6 +7,7 @@ use crate::infrastructure::repository::tag_repo::TagRepository;
 use crate::services::clipboard::{
     build_entry_preview, derive_rich_text_content, truncate_html_for_preview,
 };
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
 fn normalize_rich_text_item_content(item: &mut ClipboardEntry) {
@@ -20,6 +21,16 @@ fn normalize_rich_text_item_content(item: &mut ClipboardEntry) {
     }
 }
 
+/// Paginated history response. Pagination cursor (has_more/next_offset) is driven
+/// solely by DB rows; session items only augment the first page and never participate
+/// in offset/has_more, so they cannot挤占 or skip DB rows.
+#[derive(Serialize)]
+pub struct HistoryPage {
+    pub items: Vec<ClipboardEntry>,
+    pub has_more: bool,
+    pub next_offset: i64,
+}
+
 #[tauri::command]
 pub fn get_clipboard_history(
     state: State<'_, DbState>,
@@ -27,13 +38,24 @@ pub fn get_clipboard_history(
     limit: i32,
     offset: i32,
     content_type: Option<String>,
-) -> AppResult<Vec<ClipboardEntry>> {
-    // 1. Get history from repository
-    let mut history = state
+    smart_group_id: Option<i64>,
+) -> AppResult<HistoryPage> {
+    // 1. Query DB with limit+1 to detect has_more
+    let mut db_items = state
         .repo
-        .get_history(limit, offset, content_type.as_deref())?;
+        .get_history(limit + 1, offset, content_type.as_deref(), smart_group_id)?;
 
-    // 2. Add session history items (non-persisted) ONLY on the first page
+    // 2. has_more is determined BEFORE session merge (DB-only)
+    let has_more = db_items.len() > limit as usize;
+
+    // 3. Truncate DB rows to limit
+    db_items.truncate(limit as usize);
+
+    // 4. next_offset advances only by consumed DB rows (session does not participate)
+    let next_offset = offset as i64 + db_items.len() as i64;
+
+    // 5. Merge session items ONLY on first page (offset == 0)
+    let mut items = db_items;
     if offset == 0 {
         let session_items = session.inner().0.lock().unwrap();
         for item in session_items.iter().rev() {
@@ -42,16 +64,20 @@ pub fn get_clipboard_history(
                     continue;
                 }
             }
-            // Avoid duplicates: if item is already in DB, it will have id > 0
-            if !history.iter().any(|h| h.id == item.id && item.id != 0) {
-                history.push(item.clone());
+            if let Some(gid) = smart_group_id {
+                if item.smart_group_id != Some(gid) {
+                    continue;
+                }
+            }
+            // Avoid duplicates: session items use negative IDs that never collide with DB (positive IDs)
+            if !items.iter().any(|h| h.id == item.id) {
+                items.push(item.clone());
             }
         }
     }
 
-    // 3. Apply stable sorting: Pinned -> Pinned Order -> Timestamp -> ID
-    // This MUST match the repository's logic to maintain pagination stability
-    history.sort_by(|a, b| {
+    // 6. Apply stable sorting (must match repository ORDER BY)
+    items.sort_by(|a, b| {
         b.is_pinned
             .cmp(&a.is_pinned)
             .then_with(|| b.pinned_order.cmp(&a.pinned_order))
@@ -59,13 +85,8 @@ pub fn get_clipboard_history(
             .then_with(|| b.id.cmp(&a.id))
     });
 
-    // 4. Truncate to limit
-    if history.len() > limit as usize {
-        history.truncate(limit as usize);
-    }
-
-    // 5. Truncate content for UI performance
-    for item in &mut history {
+    // 7. Truncate content for UI performance (do NOT truncate item count after session merge)
+    for item in &mut items {
         normalize_rich_text_item_content(item);
 
         if (item.content_type == "text"
@@ -99,7 +120,11 @@ pub fn get_clipboard_history(
         }
     }
 
-    Ok(history)
+    Ok(HistoryPage {
+        items,
+        has_more,
+        next_offset,
+    })
 }
 
 #[tauri::command]

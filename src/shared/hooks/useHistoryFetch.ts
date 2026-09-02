@@ -3,9 +3,16 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Dispatch, SetStateAction } from "react";
 import type { ClipboardEntry } from "../types";
 
+interface HistoryPage {
+  items: ClipboardEntry[];
+  has_more: boolean;
+  next_offset: number;
+}
+
 interface UseHistoryFetchOptions {
   debouncedSearch: string;
   typeFilter: string | null;
+  groupFilter: number | null;
   persistentLimitEnabled: boolean;
   persistentLimit: number;
   pageSize: number;
@@ -22,6 +29,7 @@ interface UseHistoryFetchOptions {
 export const useHistoryFetch = ({
   debouncedSearch,
   typeFilter,
+  groupFilter,
   persistentLimitEnabled,
   persistentLimit,
   pageSize,
@@ -63,11 +71,8 @@ export const useHistoryFetch = ({
         historyLengthRef.current = 0;
       }
       try {
-        const baseOffset = reset
-          ? 0
-          : Math.min(currentOffsetRef.current, historyLengthRef.current);
-
-        let data: ClipboardEntry[] = [];
+        // reset 时显式使用 offset=0，不读闭包里的旧 offset
+        const baseOffset = reset ? 0 : Math.min(currentOffsetRef.current, historyLengthRef.current);
 
         const hasSearch = debouncedSearch && debouncedSearch.trim().length > 0;
 
@@ -79,6 +84,7 @@ export const useHistoryFetch = ({
             tagOnly = true;
           }
 
+          let data: ClipboardEntry[] = [];
           try {
             data = await invoke<ClipboardEntry[]>("search_clipboard_history", {
               searchTerm: term,
@@ -98,47 +104,36 @@ export const useHistoryFetch = ({
           currentOffsetRef.current = data.length;
           historyLengthRef.current = data.length;
         } else {
-          const requestedLimit = pageSize + 1; // Use standard page size for DB limit
-          const rawData = await invoke<ClipboardEntry[]>("get_clipboard_history", {
-            limit: requestedLimit,
+          // 消费后端分页对象 {items, has_more, next_offset}，不再自己推断游标
+          const page = await invoke<HistoryPage>("get_clipboard_history", {
+            limit: pageSize,
             offset: baseOffset,
-            content_type: typeFilter || undefined
+            content_type: typeFilter || undefined,
+            smart_group_id: groupFilter ?? undefined
           });
 
           if (seq !== fetchSeqRef.current) return;
 
-          const hasMoreNow = rawData.length > pageSize;
-          const data = hasMoreNow ? rawData.slice(0, pageSize) : rawData;
-
-          // Calculate how many DB items we actually retrieved (id > 0)
-          // This is critical for the next offset to be correct
-          const dbItemsCount = data.filter(item => item.id > 0).length;
-
           if (reset) {
-            setHistory(data);
-            setCurrentOffset(dbItemsCount);
-            setHasMore(hasMoreNow);
-            currentOffsetRef.current = dbItemsCount;
-            historyLengthRef.current = data.length;
+            setHistory(page.items);
+            setCurrentOffset(page.next_offset);
+            setHasMore(page.has_more);
+            currentOffsetRef.current = page.next_offset;
+            historyLengthRef.current = page.items.length;
           } else {
             // 丢弃切换标签（reset）之前发起的 loadMore 结果，防止旧标签数据污染新标签列表
             if (seq <= resetSeqRef.current) return;
-            let nextItems: ClipboardEntry[] = [];
+            // append with stable id dedup (session items use negative IDs that never collide with DB)
+            const incomingIds = new Set(page.items.map((item) => item.id));
             setHistory((prev) => {
-              const existingIds = new Set(prev.map((item) => item.id));
-              nextItems = data.filter((item) => !existingIds.has(item.id) || item.id === 0);
-
-              if (nextItems.length === 0) return prev;
-              return [...prev, ...nextItems];
+              const filtered = page.items.filter((item) => !prev.some((p) => p.id === item.id));
+              if (filtered.length === 0) return prev;
+              return [...prev, ...filtered];
             });
-
-            setCurrentOffset(prev => prev + dbItemsCount);
-            // If we didn't add any NEW items but the backend says there are more,
-            // it means the items we got were already in our list (maybe shifted due to sorting).
-            // We should keep hasMore true so the user can try to load further.
-            setHasMore(hasMoreNow);
-            currentOffsetRef.current = currentOffsetRef.current + dbItemsCount;
-            historyLengthRef.current = historyLengthRef.current + dbItemsCount;
+            setCurrentOffset(page.next_offset);
+            setHasMore(page.has_more);
+            currentOffsetRef.current = page.next_offset;
+            historyLengthRef.current = historyLengthRef.current + incomingIds.size;
           }
         }
       } catch (err) {
@@ -153,6 +148,7 @@ export const useHistoryFetch = ({
     [
       debouncedSearch,
       typeFilter,
+      groupFilter,
       pageSize,
       persistentLimit,
       persistentLimitEnabled,
@@ -184,4 +180,3 @@ export const useHistoryFetch = ({
 
   return { fetchHistory, loadMoreHistory };
 };
-

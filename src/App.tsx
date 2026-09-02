@@ -306,6 +306,7 @@ const App = () => {
   const { fetchHistory, loadMoreHistory } = useHistoryFetch({
     debouncedSearch,
     typeFilter,
+    groupFilter,
     persistentLimitEnabled,
     persistentLimit,
     pageSize: PAGE_SIZE,
@@ -592,14 +593,18 @@ const App = () => {
       };
     }
 
-    invoke<ClipboardEntry[]>("get_clipboard_history", {
-      limit: 256,
-      offset: 0,
-      contentType: null
-    })
-      .then((items) => {
+    invoke<{ items: ClipboardEntry[]; has_more: boolean; next_offset: number }>(
+      "get_clipboard_history",
+      {
+        limit: 256,
+        offset: 0,
+        content_type: null,
+        smart_group_id: null
+      }
+    )
+      .then((page) => {
         if (!cancelled) {
-          setQuickPasteHintsById(buildQuickPasteHintsById(items, quickPasteModifier));
+          setQuickPasteHintsById(buildQuickPasteHintsById(page.items, quickPasteModifier));
         }
       })
       .catch((error) => {
@@ -736,7 +741,7 @@ const App = () => {
     groupFilter
   });
 
-  const effectiveHasMore = hasMore && filteredHistory.length >= PAGE_SIZE;
+  const effectiveHasMore = hasMore;
 
   const { pinnedItems, unpinnedItems, handlePinnedReorder } = usePinnedSort({
     filteredHistory,
@@ -746,7 +751,7 @@ const App = () => {
 
   useListSelectionReset({ filteredHistory, setSelectedIndex });
 
-  useSearchFetchTrigger({ debouncedSearch, isComposing, typeFilter, fetchHistory });
+  useSearchFetchTrigger({ debouncedSearch, isComposing, typeFilter, groupFilter, fetchHistory });
 
   // When the dataset is replaced wholesale (tab/smart-group switch, or search term
   // change — exactly the cases useSearchFetchTrigger refetches with reset=true), the
@@ -868,7 +873,6 @@ const App = () => {
         groupFilter={groupFilter}
         setGroupFilter={setGroupFilter}
         smartGroups={smartGroups}
-        fetchHistory={fetchHistory}
         onSmartGroupReorder={handleSmartGroupReorder}
         onBack={handleHeaderBack}
       />

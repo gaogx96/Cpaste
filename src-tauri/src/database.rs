@@ -408,7 +408,7 @@ mod tests {
         assert!(id > 0);
 
         // 2. 测试获取
-        let history = repo.get_history(10, 0, None).expect("获取历史失败");
+        let history = repo.get_history(10, 0, None, None).expect("获取历史失败");
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content, "Hello Integration Test");
         assert_eq!(history[0].source_app, "TestApp");

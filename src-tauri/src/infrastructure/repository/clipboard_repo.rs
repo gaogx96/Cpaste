@@ -36,6 +36,7 @@ pub trait ClipboardRepository {
         limit: i32,
         offset: i32,
         content_type: Option<&str>,
+        smart_group_id: Option<i64>,
     ) -> Result<Vec<ClipboardEntry>, String>;
     fn search(&self, query: &str, limit: i32, tag_only: bool) -> Result<Vec<ClipboardEntry>, String>;
     fn delete(&self, id: i64, data_dir: Option<&std::path::Path>) -> Result<(), String>;
@@ -958,6 +959,7 @@ impl ClipboardRepository for SqliteClipboardRepository {
         limit: i32,
         offset: i32,
         content_type: Option<&str>,
+        smart_group_id: Option<i64>,
     ) -> Result<Vec<ClipboardEntry>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         let map_row = |row: &rusqlite::Row| {
@@ -1004,35 +1006,36 @@ impl ClipboardRepository for SqliteClipboardRepository {
         };
 
         let mut mapped_rows = Vec::new();
+        // Single dynamic SQL path: WHERE 1=1 + optional content_type + optional smart_group_id
+        let mut sql = String::from(
+            "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
+                        smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
+                 FROM clipboard_history
+                 WHERE 1=1",
+        );
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
         if let Some(ct) = content_type {
-            let mut stmt = conn.prepare(
-                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
-                        smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
-                 FROM clipboard_history
-                 WHERE content_type = ?
-                 ORDER BY is_pinned DESC, pinned_order DESC, timestamp DESC, id DESC
-                 LIMIT ? OFFSET ?",
-            ).map_err(|e| e.to_string())?;
-            let rows = stmt
-                .query_map(params![ct, limit, offset], map_row)
-                .map_err(|e| e.to_string())?;
-            for row in rows {
-                mapped_rows.push(row.map_err(|e| e.to_string())?);
-            }
-        } else {
-            let mut stmt = conn.prepare(
-                "SELECT id, content_type, content, html_content, source_app, timestamp, preview, is_pinned, tags, use_count, is_external, pinned_order, source_app_path,
-                        smart_group_id, smart_group_name, note, group_confidence, group_reason, group_match_type, group_manual_override
-                 FROM clipboard_history
-                 ORDER BY is_pinned DESC, pinned_order DESC, timestamp DESC, id DESC
-                 LIMIT ? OFFSET ?",
-            ).map_err(|e| e.to_string())?;
-            let rows = stmt
-                .query_map([limit, offset], map_row)
-                .map_err(|e| e.to_string())?;
-            for row in rows {
-                mapped_rows.push(row.map_err(|e| e.to_string())?);
-            }
+            sql.push_str(" AND content_type = ?");
+            params.push(Box::new(ct.to_owned()));
+        }
+        if let Some(gid) = smart_group_id {
+            sql.push_str(" AND smart_group_id = ?");
+            params.push(Box::new(gid));
+        }
+        sql.push_str(
+            " ORDER BY is_pinned DESC, pinned_order DESC, timestamp DESC, id DESC
+              LIMIT ? OFFSET ?",
+        );
+        params.push(Box::new(limit));
+        params.push(Box::new(offset));
+
+        let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(param_refs), map_row)
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            mapped_rows.push(row.map_err(|e| e.to_string())?);
         }
 
         let mut history = Vec::new();
