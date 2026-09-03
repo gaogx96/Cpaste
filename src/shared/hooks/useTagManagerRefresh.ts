@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 interface UseTagManagerRefreshOptions {
   showTagManager: boolean;
@@ -15,10 +15,15 @@ export const useTagManagerRefresh = ({
   persistentLimit,
   fetchHistory
 }: UseTagManagerRefreshOptions) => {
+  const fetchRef = useRef(fetchHistory);
+  useEffect(() => {
+    fetchRef.current = fetchHistory;
+  }, [fetchHistory]);
+
   useEffect(() => {
     if (!settingsLoaded) return;
     if (!showTagManager) {
-      fetchHistory(true);
+      fetchRef.current(true);
     }
-  }, [showTagManager, settingsLoaded, persistentLimitEnabled, persistentLimit, fetchHistory]);
+  }, [showTagManager, settingsLoaded, persistentLimitEnabled, persistentLimit]);
 };
