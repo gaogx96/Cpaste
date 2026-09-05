@@ -7,6 +7,7 @@ use crate::infrastructure::repository::tag_repo::TagRepository;
 use crate::services::clipboard::{
     build_entry_preview, derive_rich_text_content, truncate_html_for_preview,
 };
+use crate::services::smart_group_classifier::{self, SmartGroupConfig};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
@@ -18,6 +19,42 @@ fn normalize_rich_text_item_content(item: &mut ClipboardEntry) {
     let normalized = derive_rich_text_content(&item.content, item.html_content.as_deref());
     if !normalized.trim().is_empty() {
         item.content = normalized;
+    }
+}
+
+/// Reclassify all entries with NULL smart_group_id using current enabled groups/rules/examples.
+/// This is a safety net: the startup background reclassify may not have finished (or may have
+/// been missed) by the time the user switches to a smart group tab. Running it lazily here
+/// guarantees entries are classified before being fetched for a specific group filter.
+fn reclassify_unclassified(state: &State<'_, DbState>) {
+    let groups = match state.smart_group_repo.get_enabled_auto_match_groups() {
+        Ok(g) if !g.is_empty() => g,
+        _ => return,
+    };
+    let group_ids: Vec<i64> = groups.iter().map(|g| g.id).collect();
+    let rules = state.smart_group_repo.list_all_rules_for_groups(&group_ids).unwrap_or_default();
+    let examples = state.smart_group_repo.list_all_examples_for_groups(&group_ids).unwrap_or_default();
+    let config = SmartGroupConfig::build(groups, rules, examples);
+
+    let entries = match state.smart_group_repo.get_unclassified_entries() {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    if entries.is_empty() {
+        return;
+    }
+
+    for entry in &entries {
+        let result = smart_group_classifier::classify(
+            &entry.content, &entry.content_type, &config, None,
+        );
+        if let Some(group_id) = result.smart_group_id {
+            let _ = state.smart_group_repo.set_entry_classification(
+                entry.id, Some(group_id), &result.smart_group_name,
+                result.confidence, &result.reason, &result.match_type,
+            );
+        }
     }
 }
 
@@ -40,6 +77,13 @@ pub fn get_clipboard_history(
     content_type: Option<String>,
     smart_group_id: Option<i64>,
 ) -> AppResult<HistoryPage> {
+    // 0. Lazy reclassify: when querying a smart group's first page, ensure unclassified
+    //    entries are classified first. This is a safety net for cases where the startup
+    //    reclassify didn't run or didn't finish before the user switched tabs.
+    if offset == 0 && smart_group_id.is_some() {
+        reclassify_unclassified(&state);
+    }
+
     // 1. Query DB with limit+1 to detect has_more
     let mut db_items = state
         .repo

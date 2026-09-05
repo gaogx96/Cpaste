@@ -598,8 +598,8 @@ const App = () => {
       {
         limit: 256,
         offset: 0,
-        content_type: null,
-        smart_group_id: null
+        contentType: null,
+        smartGroupId: null
       }
     )
       .then((page) => {

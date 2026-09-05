@@ -76,40 +76,34 @@ pub fn init(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     // 5. App State Management
     setup_state(app, conn_arc.clone(), &settings, app_dir.clone());
 
-    // 5.1. Reclassify unclassified entries on startup (background)
+    // 5.1. Reclassify unclassified entries on startup (synchronous, before window show)
+    //      Runs on main thread so entries are classified before the frontend fetches them.
+    //      This is fast (regex matching on up to 500 entries takes a few ms).
     {
-        let handle = app_handle.clone();
-        std::thread::spawn(move || {
-            let db = handle.state::<DbState>();
-            let groups = match db.smart_group_repo.get_enabled_auto_match_groups() {
-                Ok(g) if !g.is_empty() => g,
-                _ => return,
-            };
+        let db = app.state::<DbState>();
+        let groups = match db.smart_group_repo.get_enabled_auto_match_groups() {
+            Ok(g) => g,
+            Err(_) => Vec::new(),
+        };
+        if !groups.is_empty() {
             let group_ids: Vec<i64> = groups.iter().map(|g| g.id).collect();
             let rules = db.smart_group_repo.list_all_rules_for_groups(&group_ids).unwrap_or_default();
             let examples = db.smart_group_repo.list_all_examples_for_groups(&group_ids).unwrap_or_default();
             let config = crate::services::smart_group_classifier::SmartGroupConfig::build(groups, rules, examples);
-            let entries = match db.smart_group_repo.get_unclassified_entries() {
-                Ok(e) => e,
-                Err(_) => return,
-            };
-            let mut classified = 0u32;
-            for entry in &entries {
-                let result = crate::services::smart_group_classifier::classify(
-                    &entry.content, &entry.content_type, &config, None,
-                );
-                if let Some(group_id) = result.smart_group_id {
-                    let _ = db.smart_group_repo.set_entry_classification(
-                        entry.id, Some(group_id), &result.smart_group_name,
-                        result.confidence, &result.reason, &result.match_type,
+            if let Ok(entries) = db.smart_group_repo.get_unclassified_entries() {
+                for entry in &entries {
+                    let result = crate::services::smart_group_classifier::classify(
+                        &entry.content, &entry.content_type, &config, None,
                     );
-                    classified += 1;
+                    if let Some(group_id) = result.smart_group_id {
+                        let _ = db.smart_group_repo.set_entry_classification(
+                            entry.id, Some(group_id), &result.smart_group_name,
+                            result.confidence, &result.reason, &result.match_type,
+                        );
+                    }
                 }
             }
-            if classified > 0 {
-                let _ = handle.emit("clipboard-changed", ());
-            }
-        });
+        }
     }
 
     // 6. Window Initialization (Pinned/Focus)

@@ -479,6 +479,159 @@ pub fn set_data_path(app_handle: AppHandle, new_path: String) -> AppResult<()> {
     Ok(())
 }
 
+/// Dump diagnostic log + classification state to Desktop for easy sharing.
+/// Returns the output file path.
+#[tauri::command]
+pub fn dump_diagnostics(app_handle: AppHandle) -> AppResult<String> {
+    let data_dir = app_handle.state::<AppDataDir>().0.lock().unwrap().clone();
+    let log_path = data_dir.join("cpaste.log");
+
+    let mut output = String::new();
+    output.push_str("=== Cpaste Diagnostic Dump ===\n\n");
+
+    // 1. Log file content
+    output.push_str("--- cpaste.log ---\n");
+    if let Ok(content) = std::fs::read_to_string(&log_path) {
+        output.push_str(&content);
+    } else {
+        output.push_str(&format!("(could not read log at {})\n", log_path.display()));
+    }
+
+    // 2. Classification state from DB
+    output.push_str("\n--- Classification State ---\n");
+    let db = app_handle.state::<crate::database::DbState>();
+    match db.conn.lock() {
+        Ok(conn) => {
+            // Total entries
+            let total: i64 = conn
+                .query_row("SELECT COUNT(*) FROM clipboard_history", [], |r| r.get(0))
+                .unwrap_or(-1);
+            output.push_str(&format!("Total entries: {}\n", total));
+
+            // Unclassified
+            let unclassified: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM clipboard_history WHERE smart_group_id IS NULL",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap_or(-1);
+            output.push_str(&format!("Unclassified entries: {}\n", unclassified));
+
+            // Per-group counts
+            let mut stmt = match conn.prepare(
+                "SELECT COALESCE(smart_group_id, -1), COUNT(*) FROM clipboard_history GROUP BY smart_group_id",
+            ) {
+                Ok(s) => s,
+                Err(e) => {
+                    output.push_str(&format!("(query error: {})\n", e));
+                    return write_diag_to_desktop(&output);
+                }
+            };
+            let rows = stmt.query_map([], |r| {
+                let gid: i64 = r.get(0)?;
+                let cnt: i64 = r.get(1)?;
+                Ok((gid, cnt))
+            });
+            if let Ok(rows) = rows {
+                output.push_str("Per-group counts:\n");
+                for row in rows.flatten() {
+                    if row.0 == -1 {
+                        output.push_str(&format!("  NULL: {}\n", row.1));
+                    } else {
+                        output.push_str(&format!("  group {}: {}\n", row.0, row.1));
+                    }
+                }
+            }
+
+            // Smart groups + rules
+            output.push_str("\nSmart groups:\n");
+            let mut stmt = conn
+                .prepare("SELECT id, name, enabled, auto_match_enabled FROM smart_groups ORDER BY id")
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            let groups = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, i32>(2)?,
+                        r.get::<_, i32>(3)?,
+                    ))
+                })
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            for g in groups.flatten() {
+                output.push_str(&format!(
+                    "  id={} name='{}' enabled={} auto_match={}\n",
+                    g.0, g.1, g.2, g.3
+                ));
+            }
+
+            output.push_str("\nSmart group rules:\n");
+            let mut stmt = conn
+                .prepare("SELECT id, group_id, rule_type, pattern, weight, enabled FROM smart_group_rules ORDER BY id")
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            let rules = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, f64>(4)?,
+                        r.get::<_, i32>(5)?,
+                    ))
+                })
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            for r in rules.flatten() {
+                output.push_str(&format!(
+                    "  id={} group_id={} type={} pattern='{}' weight={} enabled={}\n",
+                    r.0, r.1, r.2, r.3, r.4, r.5
+                ));
+            }
+
+            // Sample of unclassified entries (first 20)
+            output.push_str("\nSample unclassified entries (up to 20):\n");
+            let mut stmt = conn
+                .prepare("SELECT id, content_type, substr(content,1,80) FROM clipboard_history WHERE smart_group_id IS NULL LIMIT 20")
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            let entries = stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, i64>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                })
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            for e in entries.flatten() {
+                output.push_str(&format!("  id={} type={} content='{}'\n", e.0, e.1, e.2));
+            }
+        }
+        Err(e) => {
+            output.push_str(&format!("(DB lock error: {})\n", e));
+        }
+    }
+
+    write_diag_to_desktop(&output)
+}
+
+fn write_diag_to_desktop(content: &str) -> AppResult<String> {
+    // Write to data dir (which we know is writable) as a fallback
+    use std::env;
+    let out_path = if let Ok(home) = env::var("USERPROFILE") {
+        let desktop = std::path::PathBuf::from(home.clone()).join("Desktop");
+        if desktop.exists() {
+            desktop.join("cpaste-diagnostic.txt")
+        } else {
+            std::path::PathBuf::from(home).join("cpaste-diagnostic.txt")
+        }
+    } else {
+        std::path::PathBuf::from("cpaste-diagnostic.txt")
+    };
+    std::fs::write(&out_path, content).map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(out_path.to_string_lossy().to_string())
+}
+
 fn rewrite_attachment_paths_in_db(
     db_path: &std::path::Path,
     old_base: &std::path::Path,

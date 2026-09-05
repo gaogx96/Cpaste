@@ -96,7 +96,9 @@ export const useHistoryFetch = ({
             data = [];
           }
 
-          if (seq !== fetchSeqRef.current) return;
+          if (seq !== fetchSeqRef.current) {
+            return;
+          }
           // Search results are not paginated; always replace list and stop infinite loading.
           setHistory(data);
           setCurrentOffset(data.length);
@@ -105,14 +107,18 @@ export const useHistoryFetch = ({
           historyLengthRef.current = data.length;
         } else {
           // 消费后端分页对象 {items, has_more, next_offset}，不再自己推断游标
+          // 注意：Tauri v2 会把 camelCase 参数名自动映射到后端 snake_case，
+          // 所以必须用 smartGroupId / contentType，而不是 smart_group_id / content_type
           const page = await invoke<HistoryPage>("get_clipboard_history", {
             limit: pageSize,
             offset: baseOffset,
-            content_type: typeFilter || undefined,
-            smart_group_id: groupFilter ?? undefined
+            contentType: typeFilter || undefined,
+            smartGroupId: groupFilter ?? undefined
           });
 
-          if (seq !== fetchSeqRef.current) return;
+          if (seq !== fetchSeqRef.current) {
+            return;
+          }
 
           if (reset) {
             setHistory(page.items);
@@ -122,7 +128,9 @@ export const useHistoryFetch = ({
             historyLengthRef.current = page.items.length;
           } else {
             // 丢弃切换标签（reset）之前发起的 loadMore 结果，防止旧标签数据污染新标签列表
-            if (seq <= resetSeqRef.current) return;
+            if (seq <= resetSeqRef.current) {
+              return;
+            }
             // append with stable id dedup (session items use negative IDs that never collide with DB)
             const incomingIds = new Set(page.items.map((item) => item.id));
             setHistory((prev) => {

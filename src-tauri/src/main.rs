@@ -98,6 +98,7 @@ fn main() {
             app::commands::open_file_with_default_app,
             app::commands::open_file_location,
             app::commands::set_data_path,
+            app::commands::dump_diagnostics,
             app::commands::toggle_autostart,
             app::commands::is_autostart_enabled,
             app::commands::set_windows_clipboard_history,
